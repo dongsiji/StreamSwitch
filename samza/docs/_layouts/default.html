@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<html lang="en">
+
+<head>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta charset="utf-8">
+  <title>Samza {% if page.title %}- {{page.title}}{% endif %}</title>
+  <link rel="apple-touch-icon-precomposed" sizes="57x57" href="/img/favicon/apple-touch-icon-57x57.png" />
+  <link rel="apple-touch-icon-precomposed" sizes="114x114" href="/img/favicon/apple-touch-icon-114x114.png" />
+  <link rel="apple-touch-icon-precomposed" sizes="72x72" href="/img/favicon/apple-touch-icon-72x72.png" />
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/img/favicon/apple-touch-icon-144x144.png" />
+  <link rel="apple-touch-icon-precomposed" sizes="60x60" href="/img/favicon/apple-touch-icon-60x60.png" />
+  <link rel="apple-touch-icon-precomposed" sizes="120x120" href="/img/favicon/apple-touch-icon-120x120.png" />
+  <link rel="apple-touch-icon-precomposed" sizes="76x76" href="/img/favicon/apple-touch-icon-76x76.png" />
+  <link rel="apple-touch-icon-precomposed" sizes="152x152" href="/img/favicon/apple-touch-icon-152x152.png" />
+  <link rel="icon" type="image/png" href="/img/favicon/favicon-196x196.png" sizes="196x196" />
+  <link rel="icon" type="image/png" href="/img/favicon/favicon-96x96.png" sizes="96x96" />
+  <link rel="icon" type="image/png" href="/img/favicon/favicon-32x32.png" sizes="32x32" />
+  <link rel="icon" type="image/png" href="/img/favicon/favicon-16x16.png" sizes="16x16" />
+  <link rel="icon" type="image/png" href="/img/favicon/favicon-128.png" sizes="128x128" />
+  <meta name="application-name" content="https://samza.apache.org" />
+  <meta name="msapplication-TileColor" content="#FFFFFF" />
+  <meta name="msapplication-TileImage" content="/img/favicon/mstile-144x144.png" />
+  <meta name="msapplication-square70x70logo" content="/img/favicon/mstile-70x70.png" />
+  <meta name="msapplication-square150x150logo" content="/img/favicon/mstile-150x150.png" />
+  <meta name="msapplication-wide310x150logo" content="/img/favicon/mstile-310x150.png" />
+  <meta name="msapplication-square310x310logo" content="/img/favicon/mstile-310x310.png" />
+  <link href="/css/ionicons.min.css" rel="stylesheet">
+  <link href="/css/google-fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.new.css" />
+</head>
+
+<body class="home">
+  {% include main-navigation.html %}
+
+  <div class="section section--bottom-flare section--hero" id="hero">
+    <canvas id="canvas"></canvas>
+    <div class="hero-inner">
+      <div class="hero-info">
+        <h1 class="section__title">
+          Apache Samza
+        </h1>
+        <h2 class="section__title section__title--sub">
+          A distributed stream processing framework
+        </h2>
+        <div class="content">
+          <a class="button" href="/startup/quick-start/{{site.version}}">
+            Quick Start
+          </a>
+          <a class="button" href="/case-studies/">
+            Case studies
+          </a>
+        </div>
+      </div>
+
+      <div class="hero-blog-posts">
+        <h3>Latest from our blog</h3>
+        <div class="blog-posts">
+
+            {% assign sortedBlogPost = site.blog | sort: 'date' | reverse %}
+            {% assign maxCount = 3 %}
+            {% assign latestCount = 1 %}
+
+            {% for post in sortedBlogPost %}
+
+              {% if latestCount > maxCount %}
+                {% break %}
+              {% endif %}
+
+              {% if post.exclude_from_loop %}
+                {% continue %}
+              {% endif %}
+
+              {% assign latestCount = latestCount | plus: 1 %}
+
+              <a class="blog-post" href="{{ post.url }}">
+                  <div class="blog-post__title">{{ post.title }}</div>
+                  <div class="blog-post__date">{{ post.date | date: "%B %-d, %Y" }}</div>
+              </a>
+
+            {% endfor %}
+
+        </div>
+      </div>
+
+
+    </div>
+  </div>
+
+
+  <div class="section section--what-is-samza">
+
+   <!-- <div class="section__title">What is Apache Samza?</div> -->
+  <div class="content--samza-intro">
+      <p>
+        Samza allows you to build stateful applications that process data in real-time from multiple sources including Apache Kafka.
+        <br/> <br/>
+        Battle-tested at scale, it supports flexible deployment options to run on <a href="/learn/documentation/latest/deployment/yarn.html">YARN</a> or as a
+        <a href="/learn/documentation/latest/deployment/standalone.html">standalone library</a>.
+      </p>
+
+      <!-- <img src="/img/latest/learn/documentation/api/samza-arch3.png"> -->
+      <img src="/img/latest/learn/documentation/api/samza-arch4.png" width="44.7%" height="50%" hspace="25px">
+  </div>
+  </div>
+
+  <div class="section section--highlight section--bottom-flare section--features">
+    <div class="section__title section__title--center">
+      Samza features
+    </div>
+    <div class="section__items">
+      <div class="section__item">
+        <i class="section__item-icon icon ion-md-flash"></i>
+        <div class="section__item-title">
+          High performance
+        </div>
+        <div class="section__item-features">
+          <div class="section__item-feature">Samza provides extremely low latencies and <a href="https://engineering.linkedin.com/performance/benchmarking-apache-samza-12-million-messages-second-single-node">high throughput</a> to analyze your data instantly</div>
+        </div>
+      </div>
+
+      <div class="section__item">
+        <i class="section__item-icon icon ion-md-trending-up"></i>
+        <div class="section__item-title">
+
+          Horizontally scalable
+        </div>
+        <div class="section__item-features">
+          <div class="section__item-feature">Scales to several terabytes of state with features like incremental checkpoints and <a href="/learn/documentation/latest/architecture/architecture-overview.html#host-affinity">host-affinity</a></div>
+        </div>
+      </div>
+
+      <div class="section__item">
+        <i class="section__item-icon icon ion-md-build"></i>
+        <div class="section__item-title">
+          Easy to Operate
+        </div>
+        <div class="section__item-features">
+          <div class="section__item-feature">Samza is easy to operate with <a href="/learn/documentation/latest/deployment/deployment-model.html">flexible</a> deployment options - YARN, Kubernetes or standalone</div>
+        </div>
+      </div>
+
+      <div class="section__item">
+        <i class="section__item-icon icon ion-md-cloud"></i>
+        <div class="section__item-title">
+          Powerful APIs
+        </div>
+        <div class="section__item-features">
+          <div class="section__item-feature">Rich APIs to build your applications: Choose from <a href="/learn/documentation/latest/api/low-level-api.html">low-level </a>, <a href="/learn/documentation/latest/api/high-level-api.html">Streams DSL </a>, <a href="/learn/documentation/latest/api/samza-sql.html">Samza SQL</a> and Apache BEAM APIs</div>
+        </div>
+      </div>
+
+      <div class="section__item">
+        <i class="section__item-icon icon ion-md-code"></i>
+        <div class="section__item-title">
+          Write once, Run Anywhere
+        </div>
+        <div class="section__item-features">
+          <div class="section__item-feature"> Ability to run the same code to process both batch and streaming data</div>
+        </div>
+      </div>
+
+      <div class="section__item">
+        <i class="section__item-icon icon ion-md-color-wand"></i>
+        <div class="section__item-title">
+          Pluggable architecture
+        </div>
+        <div class="section__item-features">
+          <div class="section__item-feature">Integrates with several sources including <a href="/learn/documentation/latest/connectors/kafka.html">Kafka</a>, <a href="/learn/documentation/latest/connectors/hdfs.html">HDFS</a>, <a href="/learn/documentation/latest/connectors/kinesis.html">AWS Kinesis</a>, <a href="/learn/documentation/latest/connectors/eventhubs.html">Azure Eventhubs</a>, K-V stores and ElasticSearch</div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <div class="section section--brands">
+    <div class="section__title section__title--center">
+      Case Studies
+    </div>
+
+    <div class="section__items" >
+    {% assign case-studies_sorted = site.case-studies | sort: 'priority' %}
+    {% for study in case-studies_sorted %}
+
+      {% if study.exclude_from_loop %}
+        {% continue %}
+      {% endif %}
+
+      <div class="section__item">
+        <a class="section__item-logo" href="{{ study.url }}" title="{{ study.menu_title }}">
+        {% if study.logo_url %}
+          <div class="section__item-logo-bg" style="background-image: url('{{ study.logo_url }}');"></div>
+        {% else %}
+          <div class="section__item-logo-bg" style="background-image: url('https://logo.clearbit.com/{{ study.study_domain}}?size=256');"></div>
+        {% endif %}
+        </a>
+      </div>
+
+    {% endfor %}
+
+    </div>
+
+  </div>
+
+  <!-- footer starts here -->
+
+  {% include footer.html %}
+
+</body>
+
+</html>
