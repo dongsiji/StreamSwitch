@@ -76,4 +76,6 @@ public interface CheckpointBarrierHandler {
 	 * @return The duration in nanoseconds
 	 */
 	long getAlignmentDurationNanos();
+
+	void updateTotalNumberOfInputChannels(int newNumberOfInputChannels);
 }

@@ -237,8 +237,10 @@ public class CopyOnWriteStateTableSnapshot<K, N, S>
 
 		/** Tries to append next entry to {@code partitioningSource} array snapshot and returns next index.*/
 		int tryAddToSource(int currentIndex, CopyOnWriteStateTable.StateTableEntry<K, N, S> entry) {
-			final int keyGroup = KeyGroupRangeAssignment.assignToKeyGroup(entry.key, totalKeyGroups);
-			reportKeyGroupOfElementAtIndex(currentIndex, keyGroup);
+			int hashedKeyGroup = KeyGroupRangeAssignment.assignToKeyGroup(entry.key, totalKeyGroups);
+			int alignedKeyGroup = keyGroupRange.mapFromHashedToAligned(hashedKeyGroup);
+
+			reportKeyGroupOfElementAtIndex(currentIndex, alignedKeyGroup);
 			partitioningSource[currentIndex] = entry;
 			return currentIndex + 1;
 		}

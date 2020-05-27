@@ -94,6 +94,7 @@ public class StreamTaskStateInitializerImplTest {
 			streamOperator.getOperatorID(),
 			streamOperator.getClass().getSimpleName(),
 			streamOperator,
+			null,
 			typeSerializer,
 			closeableRegistry,
 			new UnregisteredMetricsGroup());
@@ -202,6 +203,7 @@ public class StreamTaskStateInitializerImplTest {
 			streamOperator.getOperatorID(),
 			streamOperator.getClass().getSimpleName(),
 			streamOperator,
+			null,
 			typeSerializer,
 			closeableRegistry,
 			new UnregisteredMetricsGroup());

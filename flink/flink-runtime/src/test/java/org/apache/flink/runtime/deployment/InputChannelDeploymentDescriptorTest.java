@@ -32,6 +32,7 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
+import org.apache.flink.runtime.rescale.RescaleID;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
 import org.junit.Test;
@@ -88,6 +89,7 @@ public class InputChannelDeploymentDescriptorTest {
 			InputChannelDeploymentDescriptor[] desc = InputChannelDeploymentDescriptor.fromEdges(
 				new ExecutionEdge[]{localEdge, remoteEdge, unknownEdge},
 				consumerSlot.getTaskManagerLocation().getResourceID(),
+				RescaleID.DEFAULT,
 				allowLazyDeployment);
 
 			assertEquals(3, desc.length);
@@ -139,6 +141,7 @@ public class InputChannelDeploymentDescriptorTest {
 		InputChannelDeploymentDescriptor[] desc = InputChannelDeploymentDescriptor.fromEdges(
 			new ExecutionEdge[]{unknownEdge},
 			consumerSlot.getTaskManagerLocation().getResourceID(),
+			RescaleID.DEFAULT,
 			allowLazyDeployment);
 
 		assertEquals(1, desc.length);
@@ -154,6 +157,7 @@ public class InputChannelDeploymentDescriptorTest {
 			InputChannelDeploymentDescriptor.fromEdges(
 				new ExecutionEdge[]{unknownEdge},
 				consumerSlot.getTaskManagerLocation().getResourceID(),
+				RescaleID.DEFAULT,
 				allowLazyDeployment);
 
 			fail("Did not throw expected ExecutionGraphException");

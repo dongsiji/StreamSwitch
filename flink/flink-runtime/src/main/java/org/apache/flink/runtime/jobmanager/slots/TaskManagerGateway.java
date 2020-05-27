@@ -27,6 +27,7 @@ import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.PartitionInfo;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.StackTraceSampleResponse;
+import org.apache.flink.runtime.rescale.RescaleOptions;
 import org.apache.flink.runtime.rpc.RpcTimeout;
 
 import java.util.concurrent.CompletableFuture;
@@ -71,6 +72,12 @@ public interface TaskManagerGateway {
 	 */
 	CompletableFuture<Acknowledge> submitTask(
 		TaskDeploymentDescriptor tdd,
+		Time timeout);
+
+	CompletableFuture<Acknowledge> rescaleTask(
+		ExecutionAttemptID executionAttemptID,
+		TaskDeploymentDescriptor tdd,
+		RescaleOptions rescaleOptions,
 		Time timeout);
 
 	/**

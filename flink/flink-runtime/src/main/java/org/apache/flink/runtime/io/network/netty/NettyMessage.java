@@ -26,6 +26,7 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.runtime.rescale.RescaleID;
 import org.apache.flink.util.ExceptionUtils;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
@@ -506,6 +507,7 @@ public abstract class NettyMessage {
 
 				partitionId.getPartitionId().writeTo(result);
 				partitionId.getProducerId().writeTo(result);
+				partitionId.getRescaleId().writeTo(result);
 				result.writeInt(queueIndex);
 				receiverId.writeTo(result);
 				result.writeInt(credit);
@@ -525,7 +527,8 @@ public abstract class NettyMessage {
 			ResultPartitionID partitionId =
 				new ResultPartitionID(
 					IntermediateResultPartitionID.fromByteBuf(buffer),
-					ExecutionAttemptID.fromByteBuf(buffer));
+					ExecutionAttemptID.fromByteBuf(buffer),
+					RescaleID.fromByteBuf(buffer));
 			int queueIndex = buffer.readInt();
 			InputChannelID receiverId = InputChannelID.fromByteBuf(buffer);
 			int credit = buffer.readInt();
@@ -570,6 +573,7 @@ public abstract class NettyMessage {
 
 				partitionId.getPartitionId().writeTo(result);
 				partitionId.getProducerId().writeTo(result);
+				partitionId.getRescaleId().writeTo(result);
 
 				receiverId.writeTo(result);
 
@@ -597,7 +601,8 @@ public abstract class NettyMessage {
 			ResultPartitionID partitionId =
 				new ResultPartitionID(
 					IntermediateResultPartitionID.fromByteBuf(buffer),
-					ExecutionAttemptID.fromByteBuf(buffer));
+					ExecutionAttemptID.fromByteBuf(buffer),
+					RescaleID.fromByteBuf(buffer));
 
 			InputChannelID receiverId = InputChannelID.fromByteBuf(buffer);
 
@@ -693,6 +698,7 @@ public abstract class NettyMessage {
 
 				partitionId.getPartitionId().writeTo(result);
 				partitionId.getProducerId().writeTo(result);
+				partitionId.getRescaleId().writeTo(result);
 				result.writeInt(credit);
 				receiverId.writeTo(result);
 
@@ -711,7 +717,8 @@ public abstract class NettyMessage {
 			ResultPartitionID partitionId =
 				new ResultPartitionID(
 					IntermediateResultPartitionID.fromByteBuf(buffer),
-					ExecutionAttemptID.fromByteBuf(buffer));
+					ExecutionAttemptID.fromByteBuf(buffer),
+					RescaleID.fromByteBuf(buffer));
 			int credit = buffer.readInt();
 			InputChannelID receiverId = InputChannelID.fromByteBuf(buffer);
 

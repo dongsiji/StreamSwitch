@@ -19,6 +19,7 @@ package org.apache.flink.streaming.runtime.partitioner;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.runtime.plugable.SerializationDelegate;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 
 /**
@@ -33,6 +34,11 @@ public class GlobalPartitioner<T> extends StreamPartitioner<T> {
 	@Override
 	public int selectChannel(SerializationDelegate<StreamRecord<T>> record) {
 		return 0;
+	}
+
+	@Override
+	public void setMetricsManager(MetricsManager metricsManager) {
+
 	}
 
 	@Override

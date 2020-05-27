@@ -68,6 +68,7 @@ import org.apache.flink.runtime.state.memory.MemoryBackendCheckpointStorage;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.runtime.taskexecutor.TestGlobalAggregateManager;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
+import org.apache.flink.runtime.rescale.RescaleID;
 import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskManagerActions;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
@@ -160,6 +161,8 @@ public class StreamTaskTerminationTest extends TestLogger {
 			taskInformation,
 			new ExecutionAttemptID(),
 			new AllocationID(),
+			RescaleID.DEFAULT,
+			null,
 			0,
 			0,
 			Collections.<ResultPartitionDeploymentDescriptor>emptyList(),

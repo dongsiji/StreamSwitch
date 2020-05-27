@@ -313,6 +313,18 @@ under the License.
 			<artifactId>oshi-core</artifactId>
 			<optional>true</optional>
 		</dependency>
+		<dependency>
+			<groupId>org.apache.kafka</groupId>
+			<artifactId>kafka-clients</artifactId>
+			<version>2.3.0</version>
+<!--			<scope>compile</scope>-->
+		</dependency>
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-ml_2.11</artifactId>
+			<version>1.8.2</version>
+<!--			<scope>compile</scope>-->
+		</dependency>
 	</dependencies>
 
 	<!-- Dependency Management to converge transitive dependency versions -->
@@ -534,6 +546,7 @@ under the License.
 									<include>io.netty:netty</include>
 									<include>org.uncommons.maths:uncommons-maths</include>
 									<include>org.apache.zookeeper:*</include>
+									<include>org.apache.kafka:*</include>
 								</includes>
 							</artifactSet>
 							<relocations combine.children="append">
@@ -559,6 +572,10 @@ under the License.
 								<relocation>
 									<pattern>org.apache.zookeeper</pattern>
 									<shadedPattern>org.apache.flink.shaded.zookeeper.org.apache.zookeeper</shadedPattern>
+								</relocation>
+								<relocation>
+									<pattern>org.apache.kafka</pattern>
+									<shadedPattern>org.apache.flink.shaded.kafka.org.apache.kafka</shadedPattern>
 								</relocation>
 								<!-- jute is already shaded into the ZooKeeper jar -->
 								<relocation>

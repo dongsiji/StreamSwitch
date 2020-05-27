@@ -29,6 +29,7 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
+import org.apache.flink.runtime.rescale.RescaleID;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
 import java.io.Serializable;
@@ -86,6 +87,7 @@ public class InputChannelDeploymentDescriptor implements Serializable {
 	public static InputChannelDeploymentDescriptor[] fromEdges(
 			ExecutionEdge[] edges,
 			ResourceID consumerResourceId,
+			RescaleID rescaleId,
 			boolean allowLazyDeployment) throws ExecutionGraphException {
 
 		final InputChannelDeploymentDescriptor[] icdd = new InputChannelDeploymentDescriptor[edges.length];
@@ -146,7 +148,7 @@ public class InputChannelDeploymentDescriptor implements Serializable {
 			}
 
 			final ResultPartitionID consumedPartitionId = new ResultPartitionID(
-					consumedPartition.getPartitionId(), producer.getAttemptId());
+					consumedPartition.getPartitionId(), producer.getAttemptId(), rescaleId);
 
 			icdd[i] = new InputChannelDeploymentDescriptor(
 					consumedPartitionId, partitionLocation);

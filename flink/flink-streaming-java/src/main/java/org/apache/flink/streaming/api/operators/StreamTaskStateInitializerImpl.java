@@ -88,6 +88,8 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 	/** This object is the factory for everything related to state backends and checkpointing. */
 	private final StateBackend stateBackend;
 
+	private KeyGroupRange assignedKeyGroupRange;
+
 	public StreamTaskStateInitializerImpl(
 		Environment environment,
 		StateBackend stateBackend,
@@ -106,6 +108,7 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 		@Nonnull OperatorID operatorID,
 		@Nonnull String operatorClassName,
 		@Nonnull KeyContext keyContext,
+		@Nullable KeyGroupRange assignedKeyGroupRange,
 		@Nullable TypeSerializer<?> keySerializer,
 		@Nonnull CloseableRegistry streamTaskCloseableRegistry,
 		@Nonnull MetricGroup metricGroup) throws Exception {
@@ -133,6 +136,7 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 
 			// -------------- Keyed State Backend --------------
 			keyedStatedBackend = keyedStatedBackend(
+				assignedKeyGroupRange,
 				keySerializer,
 				operatorIdentifierText,
 				prioritizedOperatorSubtaskStates,
@@ -262,6 +266,7 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 	}
 
 	protected <K> AbstractKeyedStateBackend<K> keyedStatedBackend(
+		KeyGroupRange assignedKeyGroupRange,
 		TypeSerializer<K> keySerializer,
 		String operatorIdentifierText,
 		PrioritizedOperatorSubtaskState prioritizedOperatorSubtaskStates,
@@ -276,11 +281,6 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 
 		TaskInfo taskInfo = environment.getTaskInfo();
 
-		final KeyGroupRange keyGroupRange = KeyGroupRangeAssignment.computeKeyGroupRangeForOperatorIndex(
-			taskInfo.getMaxNumberOfParallelSubtasks(),
-			taskInfo.getNumberOfParallelSubtasks(),
-			taskInfo.getIndexOfThisSubtask());
-
 		// Now restore processing is included in backend building/constructing process, so we need to make sure
 		// each stream constructed in restore could also be closed in case of task cancel, for example the data
 		// input stream opened for serDe during restore.
@@ -294,7 +294,7 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 					operatorIdentifierText,
 					keySerializer,
 					taskInfo.getMaxNumberOfParallelSubtasks(),
-					keyGroupRange,
+					assignedKeyGroupRange,
 					environment.getTaskKvStateRegistry(),
 					TtlTimeProvider.DEFAULT,
 					metricGroup,

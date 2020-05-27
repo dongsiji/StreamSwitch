@@ -22,6 +22,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.jobgraph.OperatorID;
+import org.apache.flink.runtime.state.KeyGroupRange;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -50,6 +51,7 @@ public interface StreamTaskStateInitializer {
 		@Nonnull OperatorID operatorID,
 		@Nonnull String operatorClassName,
 		@Nonnull KeyContext keyContext,
+		@Nullable KeyGroupRange assignedKeyGroupRange,
 		@Nullable TypeSerializer<?> keySerializer,
 		@Nonnull CloseableRegistry streamTaskCloseableRegistry,
 		@Nonnull MetricGroup metricGroup) throws Exception;

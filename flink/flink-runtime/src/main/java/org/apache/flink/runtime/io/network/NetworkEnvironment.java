@@ -326,6 +326,18 @@ public class NetworkEnvironment {
 		}
 	}
 
+	public void unregisterPartitions(ResultPartition[] partitions) {
+		synchronized (lock) {
+			if (partitions != null) {
+				for (ResultPartition partition : partitions) {
+					resultPartitionManager.releasePartitionsBy(partition);
+					taskEventDispatcher.unregisterPartition(partition.getPartitionId());
+					partition.destroyBufferPool();
+				}
+			}
+		}
+	}
+
 	public void start() throws IOException {
 		synchronized (lock) {
 			Preconditions.checkState(!isShutdown, "The NetworkEnvironment has already been shut down.");

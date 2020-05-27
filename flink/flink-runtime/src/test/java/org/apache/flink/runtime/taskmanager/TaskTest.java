@@ -61,6 +61,7 @@ import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.operators.testutils.MockInputSplitProvider;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
+import org.apache.flink.runtime.rescale.RescaleID;
 import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.taskexecutor.TestGlobalAggregateManager;
 import org.apache.flink.runtime.testingUtils.TestingUtils;
@@ -1048,6 +1049,8 @@ public class TaskTest extends TestLogger {
 				taskInformation,
 				executionAttemptId,
 				new AllocationID(),
+				RescaleID.DEFAULT,
+				null,
 				0,
 				0,
 				Collections.emptyList(),

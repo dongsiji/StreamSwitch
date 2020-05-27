@@ -23,6 +23,7 @@ import org.apache.flink.metrics.Gauge;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.network.api.writer.RecordWriter;
 import org.apache.flink.runtime.plugable.SerializationDelegate;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 import org.apache.flink.streaming.api.operators.Output;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.metrics.WatermarkGauge;
@@ -60,7 +61,8 @@ public class RecordWriterOutput<OUT> implements OperatorChain.WatermarkGaugeExpo
 			RecordWriter<SerializationDelegate<StreamRecord<OUT>>> recordWriter,
 			TypeSerializer<OUT> outSerializer,
 			OutputTag outputTag,
-			StreamStatusProvider streamStatusProvider) {
+			StreamStatusProvider streamStatusProvider,
+			MetricsManager metricsManager) {
 
 		checkNotNull(recordWriter);
 		this.outputTag = outputTag;
@@ -68,6 +70,8 @@ public class RecordWriterOutput<OUT> implements OperatorChain.WatermarkGaugeExpo
 		// with multiplexed records and watermarks
 		this.recordWriter = (RecordWriter<SerializationDelegate<StreamElement>>)
 				(RecordWriter<?>) recordWriter;
+
+		this.recordWriter.setMetricsManager(metricsManager);
 
 		TypeSerializer<StreamElement> outRecordSerializer =
 				new StreamElementSerializer<>(outSerializer);
@@ -86,6 +90,8 @@ public class RecordWriterOutput<OUT> implements OperatorChain.WatermarkGaugeExpo
 			return;
 		}
 
+		record.setLatenyTimestamp(System.currentTimeMillis());
+
 		pushToRecordWriter(record);
 	}
 
@@ -96,6 +102,8 @@ public class RecordWriterOutput<OUT> implements OperatorChain.WatermarkGaugeExpo
 			// OutputTag.
 			return;
 		}
+
+		record.setLatenyTimestamp(System.currentTimeMillis());
 
 		pushToRecordWriter(record);
 	}

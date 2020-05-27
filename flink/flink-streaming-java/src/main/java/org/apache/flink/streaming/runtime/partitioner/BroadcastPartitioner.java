@@ -19,6 +19,7 @@ package org.apache.flink.streaming.runtime.partitioner;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.runtime.plugable.SerializationDelegate;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 
 /**
@@ -42,6 +43,11 @@ public class BroadcastPartitioner<T> extends StreamPartitioner<T> {
 	@Override
 	public boolean isBroadcast() {
 		return true;
+	}
+
+	@Override
+	public void setMetricsManager(MetricsManager metricsManager) {
+
 	}
 
 	@Override

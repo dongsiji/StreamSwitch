@@ -49,7 +49,7 @@ taskmanager.heap.size: 1024m
 
 # The number of task slots that each TaskManager offers. Each slot runs one parallel pipeline.
 
-taskmanager.numberOfTaskSlots: 1
+taskmanager.numberOfTaskSlots: 4
 
 # The parallelism used for programs that did not specify and other parallelism.
 
@@ -251,3 +251,30 @@ parallelism.default: 1
 # Interval in milliseconds for refreshing the monitored directories.
 #historyserver.archive.fs.refresh-interval: 10000
 
+#==============================================================================
+# Metrics Manager Configuration
+#==============================================================================
+#
+# window size configuration
+policy.windowSize: 100000000
+
+# kafka broker list
+policy.metrics.servers: localhost:9092
+
+# kafka topic
+policy.metrics.topic: flink_metrics
+
+# number of metrtics to be read for metrics state recovery
+policy.metrics.nrecords: 15
+
+#==============================================================================
+# Stream Switch Configuration
+#==============================================================================
+#
+model.retrieve.nrecords: 15
+
+model.vertex: c21234bcbf1e8eb4c61f1927190efebd
+
+model.retrieve.interval: 100
+
+model.warmup: 10000

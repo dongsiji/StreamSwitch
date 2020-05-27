@@ -109,13 +109,15 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 	 */
 	private final List<OperatorID> userDefinedOperatorIds;
 
-	private final ExecutionVertex[] taskVertices;
+	private ExecutionVertex[] taskVertices;
 
 	private final IntermediateResult[] producedDataSets;
 
 	private final List<IntermediateResult> inputs;
 
-	private final int parallelism;
+	private final Map<IntermediateDataSetID, Integer> iresConsumerIndex;
+
+	private volatile int parallelism;
 
 	private final SlotSharingGroup slotSharingGroup;
 
@@ -191,6 +193,7 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 		this.userDefinedOperatorIds = Collections.unmodifiableList(jobVertex.getUserDefinedOperatorIDs());
 
 		this.inputs = new ArrayList<>(jobVertex.getInputs().size());
+		this.iresConsumerIndex = new HashMap<>(jobVertex.getInputs().size());
 
 		// take the sharing group
 		this.slotSharingGroup = jobVertex.getSlotSharingGroup();
@@ -454,12 +457,158 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 			this.inputs.add(ires);
 
 			int consumerIndex = ires.registerConsumer();
+			iresConsumerIndex.put(ires.getId(), consumerIndex);
 
 			for (int i = 0; i < parallelism; i++) {
 				ExecutionVertex ev = taskVertices[i];
 				ev.connectSource(num, ires, edge, consumerIndex);
 			}
 		}
+	}
+
+	public List<ExecutionVertex> scaleOut(
+		Time timeout,
+		long initialGlobalModVersion,
+		long createTimestamp) {
+
+		cleanBeforeRescale();
+
+		// TODO scaling: check sanity for parallelism
+		int oldParallelism = parallelism;
+		int numNewTaskVertices = oldParallelism + 1;
+		this.parallelism = numNewTaskVertices;
+
+		for (IntermediateResult producedDataSet : producedDataSets) {
+			producedDataSet.updateNumParallelProducers(numNewTaskVertices);
+			producedDataSet.resetConsumers();
+		}
+
+		Configuration jobConfiguration = graph.getJobConfiguration();
+		int maxPriorAttemptsHistoryLength = jobConfiguration != null ?
+				jobConfiguration.getInteger(JobManagerOptions.MAX_ATTEMPTS_HISTORY_SIZE) :
+				JobManagerOptions.MAX_ATTEMPTS_HISTORY_SIZE.defaultValue();
+
+		ExecutionVertex[] newTaskVertices = new ExecutionVertex[numNewTaskVertices];
+		List<ExecutionVertex> createdTaskVertices = new ArrayList<>(numNewTaskVertices - oldParallelism);
+		for (int i = 0; i < numNewTaskVertices; i++) {
+			if (i < oldParallelism) {
+				newTaskVertices[i] = taskVertices[i];
+				newTaskVertices[i].updateTaskNameWithSubtaskIndex();
+			} else {
+				ExecutionVertex taskVertex = new ExecutionVertex(
+					this,
+					i,
+					producedDataSets,
+					timeout,
+					initialGlobalModVersion,
+					createTimestamp,
+					maxPriorAttemptsHistoryLength);
+
+				for (int num = 0; num < inputs.size(); num++) {
+					JobEdge edge = jobVertex.getInputs().get(num);
+
+					IntermediateResult ires = inputs.get(num);
+					int consumerIndex = iresConsumerIndex.get(ires.getId());
+
+					taskVertex.connectSource(num, ires, edge, consumerIndex);
+				}
+
+				newTaskVertices[i] = taskVertex;
+				createdTaskVertices.add(taskVertex);
+			}
+		}
+		this.taskVertices = newTaskVertices;
+
+		// sanity check for the double referencing between intermediate result partitions and execution vertices
+		for (IntermediateResult ir : this.producedDataSets) {
+			if (ir.getNumberOfAssignedPartitions() != parallelism) {
+				throw new RuntimeException("The intermediate result's partitions were not correctly assigned when doing rescaling.");
+			}
+		}
+
+
+		// TODO scaling: whether need to do something for InputSplitSource?
+
+		return createdTaskVertices;
+	}
+
+	public void resetProducedDataSets() {
+		for (IntermediateResult producedDataSet : producedDataSets) {
+			producedDataSet.resetConsumers();
+		}
+	}
+
+	public List<ExecutionVertex> scaleIn(
+		Time timeout,
+		long initialGlobalModVersion,
+		long createTimestamp) {
+
+		cleanBeforeRescale();
+
+		// TODO scaling: check sanity for parallelism
+		int oldParallelism = parallelism;
+		int numNewTaskVertices = oldParallelism - 1;
+		this.parallelism = numNewTaskVertices;
+
+		for (IntermediateResult producedDataSet : producedDataSets) {
+			producedDataSet.updateNumParallelProducers(numNewTaskVertices);
+			producedDataSet.resetConsumers();
+		}
+
+		Configuration jobConfiguration = graph.getJobConfiguration();
+		int maxPriorAttemptsHistoryLength = jobConfiguration != null ?
+			jobConfiguration.getInteger(JobManagerOptions.MAX_ATTEMPTS_HISTORY_SIZE) :
+			JobManagerOptions.MAX_ATTEMPTS_HISTORY_SIZE.defaultValue();
+
+		ExecutionVertex[] newTaskVertices = new ExecutionVertex[numNewTaskVertices];
+		List<ExecutionVertex> removedTaskVertices = new ArrayList<>(oldParallelism - numNewTaskVertices);
+		for (int i = 0; i < oldParallelism; i++) {
+			if (i < numNewTaskVertices) {
+				newTaskVertices[i] = taskVertices[i];
+				newTaskVertices[i].updateTaskNameWithSubtaskIndex();
+			} else {
+				taskVertices[i].deregisterExecution();
+				removedTaskVertices.add(taskVertices[i]);
+			}
+		}
+		this.taskVertices = newTaskVertices;
+
+		// sanity check for the double referencing between intermediate result partitions and execution vertices
+		for (IntermediateResult ir : this.producedDataSets) {
+			if (ir.getNumberOfAssignedPartitions() != parallelism) {
+				throw new RuntimeException("The intermediate result's partitions were not correctly assigned when doing rescaling.");
+			}
+		}
+
+
+		// TODO scaling: whether need to do something for InputSplitSource?
+
+		return removedTaskVertices;
+	}
+
+	public void reconnectWithUpstream(IntermediateResult[] upstreamProducedDataSets) {
+		List<JobEdge> inputs = jobVertex.getInputs();
+
+		for (IntermediateResult ires : upstreamProducedDataSets) {
+			for (int num = 0; num < inputs.size(); num++) {
+				JobEdge edge = inputs.get(num);
+
+				if (edge.getSourceId().equals(ires.getId())) {
+					int consumerIndex = ires.registerConsumer();
+					iresConsumerIndex.put(ires.getId(), consumerIndex);
+
+					for (int i = 0; i < parallelism; i++) {
+						ExecutionVertex ev = taskVertices[i];
+						ev.connectSource(num, ires, edge, consumerIndex);
+					}
+				}
+			}
+		}
+	}
+
+	public void cleanBeforeRescale() {
+		// clear this field to generating updated taskInformation later
+		this.taskInformationOrBlobKey = null;
 	}
 
 	//---------------------------------------------------------------------------------------------

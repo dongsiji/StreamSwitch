@@ -136,7 +136,7 @@ under the License.
 			to revisit the impact at that time.
 		-->
 		<minikdc.version>2.7.2</minikdc.version>
-		<generated.docs.dir>./docs/_includes/generated</generated.docs.dir>
+		<generatrated.docs.dir>./docs/_includes/generated</generatrated.docs.dir>
 	</properties>
 
 	<dependencies>
@@ -1263,6 +1263,10 @@ under the License.
 					<excludes>
 						<!-- Additional files like .gitignore etc.-->
 						<exclude>**/.*/**</exclude>
+						<exclude>flink-runtime/**</exclude>
+						<exclude>flink-runtime-web/**</exclude>
+						<exclude>tools/**</exclude>
+						<exclude>flink-streaming-java/**</exclude>
 						<exclude>**/*.prefs</exclude>
 						<exclude>**/*.log</exclude>
 						<!-- External web libraries. -->

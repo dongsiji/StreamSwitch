@@ -480,6 +480,9 @@ public abstract class ClusterClient<T> {
 			List<URL> libraries, List<URL> classpaths, ClassLoader classLoader, SavepointRestoreSettings savepointSettings)
 			throws ProgramInvocationException {
 		JobGraph job = getJobGraph(flinkConfig, compiledPlan, libraries, classpaths, savepointSettings);
+
+		job.setJobConfiguration(flinkConfig);
+
 		return submitJob(job, classLoader);
 	}
 

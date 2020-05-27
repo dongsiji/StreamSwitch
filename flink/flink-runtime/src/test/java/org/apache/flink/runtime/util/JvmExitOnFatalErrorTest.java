@@ -64,6 +64,7 @@ import org.apache.flink.runtime.taskexecutor.TaskManagerConfiguration;
 import org.apache.flink.runtime.taskexecutor.TestGlobalAggregateManager;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.NoOpTaskManagerActions;
+import org.apache.flink.runtime.rescale.RescaleID;
 import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.testutils.TestJvmProcess;
@@ -200,6 +201,8 @@ public class JvmExitOnFatalErrorTest {
 						taskInformation,
 						executionAttemptID,
 						slotAllocationId,
+						RescaleID.DEFAULT,
+						null,
 						0,       // subtaskIndex
 						0,       // attemptNumber
 						Collections.<ResultPartitionDeploymentDescriptor>emptyList(),

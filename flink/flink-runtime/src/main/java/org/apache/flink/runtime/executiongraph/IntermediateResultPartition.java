@@ -105,6 +105,10 @@ public class IntermediateResultPartition {
 		consumers.get(consumerNumber).add(edge);
 	}
 
+	void resetConsumers() {
+		consumers = new ArrayList<>(0);
+	}
+
 	boolean markFinished() {
 		// Sanity check that this is only called on blocking partitions.
 		if (!getResultType().isBlocking()) {

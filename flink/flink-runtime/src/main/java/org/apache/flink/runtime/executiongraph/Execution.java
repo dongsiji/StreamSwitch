@@ -52,6 +52,9 @@ import org.apache.flink.runtime.jobmaster.SlotRequestId;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.StackTraceSampleResponse;
+import org.apache.flink.runtime.rescale.RescaleID;
+import org.apache.flink.runtime.rescale.RescaleOptions;
+import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
@@ -358,7 +361,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	 * @param taskRestore information to restore the state
 	 */
 	public void setInitialState(@Nullable JobManagerTaskRestore taskRestore) {
-		checkState(state == CREATED, "Can only assign operator state when execution attempt is in CREATED");
+//		checkState(state == CREATED, "Can only assign operator state when execution attempt is in CREATED");
+		// TODO rescaling : what if in other state, why must be in CREATED?
 		this.taskRestore = taskRestore;
 	}
 
@@ -460,6 +464,19 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 		} catch (IllegalExecutionStateException e) {
 			return FutureUtils.completedExceptionally(e);
 		}
+	}
+
+	public CompletableFuture<Execution> allocateAndAssignSlotForExecution(RescaleID rescaleId) {
+		final ExecutionGraph executionGraph = getVertex().getExecutionGraph();
+		getVertex().updateRescaleId(rescaleId);
+
+		return allocateAndAssignSlotForExecution(
+			executionGraph.getSlotProvider(),
+			executionGraph.isQueuedSchedulingAllowed(),
+			LocationPreferenceConstraint.ANY,
+			Collections.emptySet(),
+			executionGraph.getAllocationTimeout()
+		);
 	}
 
 	/**
@@ -570,8 +587,9 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	 * Deploys the execution to the previously assigned resource.
 	 *
 	 * @throws JobException if the execution cannot be deployed to the assigned resource
+	 * @return Acknowledge
 	 */
-	public void deploy() throws JobException {
+	public CompletableFuture<Acknowledge> deploy() throws JobException {
 		assertRunningInJobMasterMainThread();
 
 		final LogicalSlot slot  = assignedResource;
@@ -610,7 +628,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			// race double check, did we fail/cancel and do we need to release the slot?
 			if (this.state != DEPLOYING) {
 				slot.releaseSlot(new FlinkException("Actual state of execution " + this + " (" + state + ") does not match expected state DEPLOYING."));
-				return;
+				return null;
 			}
 
 			if (LOG.isInfoEnabled()) {
@@ -635,7 +653,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 			// We run the submission in the future executor so that the serialization of large TDDs does not block
 			// the main thread and sync back to the main thread once submission is completed.
-			CompletableFuture.supplyAsync(() -> taskManagerGateway.submitTask(deployment, rpcTimeout), executor)
+			return CompletableFuture.supplyAsync(() -> taskManagerGateway.submitTask(deployment, rpcTimeout), executor)
 				.thenCompose(Function.identity())
 				.whenCompleteAsync(
 					(ack, failure) -> {
@@ -659,6 +677,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			markFailed(t);
 			ExceptionUtils.rethrow(t);
 		}
+		return null;
 	}
 
 	/**
@@ -897,6 +916,68 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	@Override
 	public void fail(Throwable t) {
 		processFail(t, false);
+	}
+
+	public CompletableFuture<Void> scheduleRescale(
+			RescaleID rescaleId,
+			RescaleOptions rescaleOptions,
+			@Nullable KeyGroupRange keyGroupRange) throws ExecutionGraphException {
+
+		getVertex().updateRescaleId(rescaleId);
+		getVertex().assignKeyGroupRange(keyGroupRange);
+
+		assertRunningInJobMasterMainThread();
+
+		final LogicalSlot slot = assignedResource;
+		checkNotNull(slot, "Try to rescale a vertex which isn't assigned slot.");
+
+		if(this.state != RUNNING) {
+			throw new IllegalStateException("The vertex must be in RUNNING state to be rescaled. Found state " + this.state);
+		}
+
+		final TaskDeploymentDescriptor deployment = vertex.createDeploymentDescriptor(
+			attemptId,
+			slot,
+			taskRestore,
+			attemptNumber);
+
+		// null taskRestore to let it be GC'ed
+		taskRestore = null;
+
+		final ComponentMainThreadExecutor jobMasterMainThreadExecutor =
+			vertex.getExecutionGraph().getJobMasterMainThreadExecutor();
+
+		final TaskManagerGateway taskManagerGateway = slot.getTaskManagerGateway();
+
+		return CompletableFuture
+				.supplyAsync(() -> taskManagerGateway.rescaleTask(attemptId, deployment, rescaleOptions, rpcTimeout), executor)
+				.thenCompose(Function.identity())
+				.handleAsync((ack, failure) -> {
+					if (failure != null) {
+						LOG.error("++++++ scheduleRescale err: ", failure);
+						throw new CompletionException(failure);
+					}
+					return null;
+				}, jobMasterMainThreadExecutor);
+	}
+
+	public CompletableFuture<Void> scheduleRescale(
+		RescaleID rescaleId,
+		RescaleOptions rescaleOptions,
+		@Nullable KeyGroupRange keyGroupRange,
+		int idInModel) throws ExecutionGraphException {
+
+		getVertex().setIdInModel(idInModel);
+
+		return scheduleRescale(rescaleId, rescaleOptions, keyGroupRange);
+	}
+
+	public CompletableFuture<Void> deploy(KeyGroupRange keyGroupRange, int idInModel) throws JobException {
+		getVertex().assignKeyGroupRange(keyGroupRange);
+		getVertex().setIdInModel(idInModel);
+
+		return this.deploy()
+			.handle((ack, failure) -> null);
 	}
 
 	/**

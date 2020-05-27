@@ -32,6 +32,7 @@ import org.apache.flink.runtime.executiongraph.TaskInformation;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.operators.BatchTask;
+import org.apache.flink.runtime.rescale.RescaleID;
 import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.TestLogger;
 
@@ -59,6 +60,7 @@ public class TaskDeploymentDescriptorTest extends TestLogger {
 	private static final JobVertexID vertexID = new JobVertexID();
 	private static final ExecutionAttemptID execId = new ExecutionAttemptID();
 	private static final AllocationID allocationId = new AllocationID();
+	private static final RescaleID rescaleId = RescaleID.DEFAULT;
 	private static final String jobName = "job name";
 	private static final String taskName = "task name";
 	private static final int numberOfKeyGroups = 1;
@@ -137,10 +139,13 @@ public class TaskDeploymentDescriptorTest extends TestLogger {
 			taskInformation,
 			execId,
 			allocationId,
+			rescaleId,
 			indexInSubtaskGroup,
 			attemptNumber,
 			targetSlotNumber,
 			taskRestore,
+			null,
+			indexInSubtaskGroup,
 			producedResults,
 			inputGates);
 	}

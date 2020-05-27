@@ -54,8 +54,8 @@ import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
+import org.apache.flink.runtime.rescale.RescaleID;
 import org.apache.flink.runtime.state.TestTaskStateManager;
-import org.apache.flink.runtime.taskexecutor.GlobalAggregateManager;
 import org.apache.flink.runtime.taskexecutor.TestGlobalAggregateManager;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
 import org.apache.flink.util.SerializedValue;
@@ -254,6 +254,8 @@ public class TaskAsyncCallTest extends TestLogger {
 			taskInformation,
 			new ExecutionAttemptID(),
 			new AllocationID(),
+			RescaleID.DEFAULT,
+			null,
 			0,
 			0,
 			Collections.<ResultPartitionDeploymentDescriptor>emptyList(),

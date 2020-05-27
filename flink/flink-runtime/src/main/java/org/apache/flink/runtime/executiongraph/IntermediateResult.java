@@ -22,6 +22,7 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -34,7 +35,7 @@ public class IntermediateResult {
 
 	private final ExecutionJobVertex producer;
 
-	private final IntermediateResultPartition[] partitions;
+	private IntermediateResultPartition[] partitions;
 
 	/**
 	 * Maps intermediate result partition IDs to a partition index. This is
@@ -44,7 +45,7 @@ public class IntermediateResult {
 	 */
 	private final HashMap<IntermediateResultPartitionID, Integer> partitionLookupHelper = new HashMap<>();
 
-	private final int numParallelProducers;
+	private int numParallelProducers;
 
 	private final AtomicInteger numberOfRunningProducers;
 
@@ -94,6 +95,52 @@ public class IntermediateResult {
 		partitions[partitionNumber] = partition;
 		partitionLookupHelper.put(partition.getPartitionId(), partitionNumber);
 		partitionsAssigned++;
+	}
+
+	public void dropPartition(IntermediateResultPartition partition) {
+		if (partition == null) {
+			throw new IllegalArgumentException();
+		}
+
+		partitionLookupHelper.remove(partition.getPartitionId());
+		partitionsAssigned--;
+	}
+
+	public void updateNumParallelProducers(int numParallelProducers) {
+		if (!resultType.isPipelined() || !resultType.isBounded()) {
+			throw new IllegalArgumentException("cannot adjust parallelism for non-streaming job");
+		}
+		if (numParallelProducers < this.numParallelProducers) {
+			this.numParallelProducers = numParallelProducers;
+			IntermediateResultPartition[] newPartitions = new IntermediateResultPartition[numParallelProducers];
+			for (int i = 0; i < partitions.length; i++) {
+				if (numParallelProducers > i) {
+					newPartitions[i] = partitions[i];
+				} else {
+					// TODO: when decrease the numparallel, remember to remove ejv from executionGraph
+					dropPartition(partitions[i]);
+				}
+			}
+			partitions = newPartitions;
+			return;
+//			throw new IllegalArgumentException("scale down is not supported now");
+		}
+
+		this.numParallelProducers = numParallelProducers;
+		IntermediateResultPartition[] newPartitions = new IntermediateResultPartition[numParallelProducers];
+		for (int i = 0; i < partitions.length; i++) {
+			newPartitions[i] = partitions[i];
+		}
+		partitions = newPartitions;
+	}
+
+	public void resetConsumers() {
+		numConsumers = 0;
+		for (IntermediateResultPartition p : partitions) {
+			if (p != null) {
+				p.resetConsumers();
+			}
+		}
 	}
 
 	public IntermediateDataSetID getId() {

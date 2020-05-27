@@ -21,6 +21,7 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.runtime.plugable.SerializationDelegate;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.util.Preconditions;
 
@@ -47,11 +48,19 @@ public class KeyGroupStreamPartitioner<T, K> extends StreamPartitioner<T> implem
 		return maxParallelism;
 	}
 
+	public KeySelector<T, K> getKeySelector() {
+		return keySelector;
+	}
+
+	private MetricsManager metricsManager;
+
 	@Override
 	public int selectChannel(SerializationDelegate<StreamRecord<T>> record) {
 		K key;
 		try {
 			key = keySelector.getKey(record.getInstance().getValue());
+			record.getInstance().setKeyGroup(KeyGroupRangeAssignment.assignToKeyGroup(key, maxParallelism));
+			metricsManager.incRecordsOutKeyGroup(record.getInstance().getKeyGroup());
 		} catch (Exception e) {
 			throw new RuntimeException("Could not extract key from " + record.getInstance().getValue(), e);
 		}
@@ -72,5 +81,10 @@ public class KeyGroupStreamPartitioner<T, K> extends StreamPartitioner<T> implem
 	public void configure(int maxParallelism) {
 		KeyGroupRangeAssignment.checkParallelismPreconditions(maxParallelism);
 		this.maxParallelism = maxParallelism;
+	}
+
+	@Override
+	public void setMetricsManager(MetricsManager metricsManager) {
+		this.metricsManager = metricsManager;
 	}
 }

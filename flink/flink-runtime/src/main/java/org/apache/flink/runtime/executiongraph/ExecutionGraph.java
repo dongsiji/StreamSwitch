@@ -75,13 +75,11 @@ import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.SerializedThrowable;
 import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.StringUtils;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -662,6 +660,10 @@ public class ExecutionGraph implements AccessExecutionGraph {
 		return this.userClassLoader;
 	}
 
+	public Time getRpcTimeout() {
+		return this.rpcTimeout;
+	}
+
 	@Override
 	public JobStatus getState() {
 		return state;
@@ -881,6 +883,15 @@ public class ExecutionGraph implements AccessExecutionGraph {
 
 		terminationFuture = new CompletableFuture<>();
 		failoverStrategy.notifyNewVertices(newExecJobVertices);
+	}
+
+	public void updateNumOfTotalVertices() {
+		int totalVertices = 0;
+		for (ExecutionJobVertex ejv : tasks.values()) {
+			totalVertices += ejv.getParallelism();
+		}
+
+		this.numVerticesTotal = totalVertices;
 	}
 
 	public void scheduleForExecution() throws JobException {
@@ -1391,7 +1402,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 * and is used to disambiguate concurrent modifications between local and global
 	 * failover actions.
 	 */
-	long getGlobalModVersion() {
+	public long getGlobalModVersion() {
 		return globalModVersion;
 	}
 

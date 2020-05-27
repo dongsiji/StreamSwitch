@@ -147,4 +147,6 @@ public interface StreamOperator<OUT> extends CheckpointListener, KeyContext, Dis
 	MetricGroup getMetricGroup();
 
 	OperatorID getOperatorID();
+
+	void updateOutput(StreamTask<?, ?> containingTask, Output<StreamRecord<OUT>> output);
 }

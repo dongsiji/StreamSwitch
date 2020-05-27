@@ -19,9 +19,16 @@
 package org.apache.flink.runtime.state;
 
 import org.apache.flink.util.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
 /**
  * This class defines a range of key-group indexes. Key-groups are the granularity into which the keyspace of a job
@@ -29,13 +36,18 @@ import java.util.Iterator;
  */
 public class KeyGroupRange implements KeyGroupsList, Serializable {
 
+	private static final Logger LOG = LoggerFactory.getLogger(KeyGroupRange.class);
+
 	private static final long serialVersionUID = 4869121477592070607L;
 
 	/** The empty key-group */
 	public static final KeyGroupRange EMPTY_KEY_GROUP_RANGE = new KeyGroupRange();
 
-	private final int startKeyGroup;
-	private final int endKeyGroup;
+	private volatile int startKeyGroup;
+	private volatile int endKeyGroup;
+
+	private final Map<Integer, Integer> fromAlignedToHashed = new HashMap<>();
+	private final Map<Integer, Integer> fromHashedToAligned = new HashMap<>();
 
 	/**
 	 * Empty KeyGroup Constructor
@@ -57,6 +69,36 @@ public class KeyGroupRange implements KeyGroupsList, Serializable {
 		this.startKeyGroup = startKeyGroup;
 		this.endKeyGroup = endKeyGroup;
 		Preconditions.checkArgument(getNumberOfKeyGroups() >= 0, "Potential overflow detected.");
+	}
+
+	public KeyGroupRange(int startKeyGroup, int endKeyGroup, List<Integer> mappingFromPartitionAssignment) {
+		this(startKeyGroup, endKeyGroup);
+
+		for (int i = 0; i < mappingFromPartitionAssignment.size(); i++) {
+			fromAlignedToHashed.put(i, mappingFromPartitionAssignment.get(i));
+			fromHashedToAligned.put(mappingFromPartitionAssignment.get(i), i);
+		}
+	}
+
+	public int mapFromAlignedToHashed(int alignedKeyGroup) {
+		return fromAlignedToHashed.isEmpty() ? alignedKeyGroup : fromAlignedToHashed.get(alignedKeyGroup - startKeyGroup);
+	}
+
+	public int mapFromHashedToAligned(int hashedKeyGroup) {
+		return fromHashedToAligned.isEmpty() ? hashedKeyGroup : fromHashedToAligned.get(hashedKeyGroup) + startKeyGroup;
+	}
+
+	public void update(KeyGroupRange keyGroupRange) {
+		if (keyGroupRange != null) {
+			this.startKeyGroup = keyGroupRange.getStartKeyGroup();
+			this.endKeyGroup = keyGroupRange.getEndKeyGroup();
+
+			this.fromAlignedToHashed.clear();
+			this.fromAlignedToHashed.putAll(keyGroupRange.getFromAlignedToHashed());
+
+			this.fromHashedToAligned.clear();
+			this.fromHashedToAligned.putAll(keyGroupRange.getFromHashedToAligned());
+		}
 	}
 
 
@@ -106,6 +148,14 @@ public class KeyGroupRange implements KeyGroupsList, Serializable {
 	 */
 	public int getEndKeyGroup() {
 		return endKeyGroup;
+	}
+
+	public Map<Integer, Integer> getFromAlignedToHashed() {
+		return fromAlignedToHashed;
+	}
+
+	private Map<Integer, Integer> getFromHashedToAligned() {
+		return fromHashedToAligned;
 	}
 
 	@Override

@@ -22,6 +22,8 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.metrics.MetricNames;
+import org.apache.flink.runtime.rescale.TaskRescaleManager;
+import org.apache.flink.runtime.taskmanager.RuntimeEnvironment;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.graph.StreamEdge;
 import org.apache.flink.streaming.api.operators.TwoInputStreamOperator;
@@ -107,6 +109,9 @@ public class TwoInputStreamTask<IN1, IN2, OUT> extends StreamTask<OUT, TwoInputS
 		headOperator.getMetricGroup().gauge(MetricNames.IO_CURRENT_INPUT_2_WATERMARK, input2WatermarkGauge);
 		// wrap watermark gauge since registered metrics must be unique
 		getEnvironment().getMetricGroup().gauge(MetricNames.IO_CURRENT_INPUT_WATERMARK, minInputWatermarkGauge::getValue);
+
+		// pass on the MetricsManager
+		inputProcessor.setMetricsManager(getMetricsManager());
 	}
 
 	@Override
@@ -129,5 +134,18 @@ public class TwoInputStreamTask<IN1, IN2, OUT> extends StreamTask<OUT, TwoInputS
 	@Override
 	protected void cancelTask() {
 		running = false;
+	}
+
+	@Override
+	public void reconnect() {
+		TaskRescaleManager rescaleManager = ((RuntimeEnvironment) getEnvironment()).taskRescaleManager;
+
+		if (!rescaleManager.isScalingTarget()) {
+			return;
+		}
+
+		if (rescaleManager.isScalingGates()) {
+			inputProcessor.reconnect();
+		}
 	}
 }

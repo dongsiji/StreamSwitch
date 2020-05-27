@@ -38,11 +38,16 @@ import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
+import org.apache.flink.runtime.rescale.TaskRescaleManager;
+import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.TaskStateManager;
 
 import java.util.Map;
 import java.util.concurrent.Future;
 import org.apache.flink.runtime.taskexecutor.GlobalAggregateManager;
+import org.apache.flink.runtime.util.profiling.NoopMetricsManager;
+import org.apache.flink.runtime.util.profiling.KafkaMetricsManager;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -84,9 +89,17 @@ public class RuntimeEnvironment implements Environment {
 	private final TaskKvStateRegistry kvStateRegistry;
 
 	private final TaskManagerRuntimeInfo taskManagerInfo;
+
+	// TODO scaling : pls update here
+	public final TaskRescaleManager taskRescaleManager;
+
+	public final KeyGroupRange keyGroupRange;
+
 	private final TaskMetricGroup metrics;
 
 	private final Task containingTask;
+
+	private final MetricsManager metricsManager;
 
 	// ------------------------------------------------------------------------
 
@@ -113,6 +126,8 @@ public class RuntimeEnvironment implements Environment {
 			TaskEventDispatcher taskEventDispatcher,
 			CheckpointResponder checkpointResponder,
 			TaskManagerRuntimeInfo taskManagerInfo,
+			TaskRescaleManager taskRescaleManager,
+			KeyGroupRange keyGroupRange,
 			TaskMetricGroup metrics,
 			Task containingTask) {
 
@@ -138,8 +153,25 @@ public class RuntimeEnvironment implements Environment {
 		this.taskEventDispatcher = checkNotNull(taskEventDispatcher);
 		this.checkpointResponder = checkNotNull(checkpointResponder);
 		this.taskManagerInfo = checkNotNull(taskManagerInfo);
+		this.taskRescaleManager = checkNotNull(taskRescaleManager);
+		this.keyGroupRange = keyGroupRange;
 		this.containingTask = containingTask;
 		this.metrics = metrics;
+		if (taskInfo.getTaskNameWithSubtasks().contains("Sink")) {
+			this.metricsManager = new NoopMetricsManager(
+				taskInfo.getTaskNameWithSubtasks(),
+				this.jobVertexId,
+				jobConfiguration,
+				taskInfo.getIdInModel(),
+				taskInfo.getMaxNumberOfParallelSubtasks());
+		} else {
+			this.metricsManager = new KafkaMetricsManager(
+				taskInfo.getTaskNameWithSubtasks(),
+				this.jobVertexId,
+				jobConfiguration,
+				taskInfo.getIdInModel(),
+				taskInfo.getMaxNumberOfParallelSubtasks());
+		}
 	}
 
 	// ------------------------------------------------------------------------
@@ -288,5 +320,10 @@ public class RuntimeEnvironment implements Environment {
 	@Override
 	public void failExternally(Throwable cause) {
 		this.containingTask.failExternally(cause);
+	}
+
+	@Override
+	public MetricsManager getMetricsManager() {
+		return metricsManager;
 	}
 }

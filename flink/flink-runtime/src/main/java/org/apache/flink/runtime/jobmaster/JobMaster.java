@@ -89,6 +89,7 @@ import org.apache.flink.runtime.query.UnknownKvStateLocation;
 import org.apache.flink.runtime.registration.RegisteredRpcConnection;
 import org.apache.flink.runtime.registration.RegistrationResponse;
 import org.apache.flink.runtime.registration.RetryingRegistration;
+import org.apache.flink.runtime.rescale.JobRescaleCoordinator;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerId;
 import org.apache.flink.runtime.rest.handler.legacy.backpressure.BackPressureStatsTracker;
@@ -121,6 +122,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -183,6 +186,8 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 	private final Scheduler scheduler;
 
 	private final RestartStrategy restartStrategy;
+
+	private final JobRescaleCoordinator jobRescaleCoordinator;
 
 	// --------- BackPressure --------
 
@@ -291,6 +296,9 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 		this.establishedResourceManagerConnection = null;
 
 		this.accumulators = new HashMap<>();
+
+		this.jobRescaleCoordinator = new JobRescaleCoordinator(
+			jobGraph, executionGraph, userCodeLoader);
 	}
 
 	//----------------------------------------------------------------------------------------------
@@ -390,13 +398,41 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 			int newParallelism,
 			RescalingBehaviour rescalingBehaviour,
 			Time timeout) {
-		final ArrayList<JobVertexID> allOperators = new ArrayList<>(jobGraph.getNumberOfVertices());
+//		final ArrayList<JobVertexID> allOperators = new ArrayList<>(jobGraph.getNumberOfVertices());
+//
+//		for (JobVertex jobVertex : jobGraph.getVertices()) {
+//			allOperators.add(jobVertex.getID());
+//		}
+//
+//		return rescaleOperators(allOperators, newParallelism, rescalingBehaviour, timeout);
 
-		for (JobVertex jobVertex : jobGraph.getVertices()) {
-			allOperators.add(jobVertex.getID());
+		Iterator<ExecutionJobVertex> iterator = executionGraph.getVerticesTopologically().iterator();
+
+		for (int i = 0; i < newParallelism; i++) {
+			iterator.next();
+		}
+		ExecutionJobVertex targetEjv = iterator.next();
+
+		Map<Integer, List<Integer>> partitionAssignment = new HashMap<>();
+		partitionAssignment.put(0, new ArrayList<>());
+		partitionAssignment.put(1, new ArrayList<>());
+
+		for (int i = 0; i < 128; i++) {
+			if (i % 2 == 0) {
+				partitionAssignment.get(0).add(i);
+			} else {
+				partitionAssignment.get(1).add(i);
+			}
+//			partitionAssignment.get(0).add(i);
 		}
 
-		return rescaleOperators(allOperators, newParallelism, rescalingBehaviour, timeout);
+//		jobRescaleCoordinator.repartition(targetEjv.getJobVertexId(), partitionAssignment);
+
+//		jobRescaleCoordinator.scaleOut(targetEjv.getJobVertexId(), targetEjv.getParallelism() + 1, partitionAssignment);
+
+//		jobRescaleCoordinator.scaleIn(targetEjv.getJobVertexId(), targetEjv.getParallelism() - 1, partitionAssignment);
+
+		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	@Override
@@ -484,6 +520,9 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 				if (executionGraph == currentExecutionGraph) {
 					clearExecutionGraphFields();
 					assignExecutionGraph(restoredExecutionGraph, newJobManagerJobMetricGroup);
+
+					executionGraph.start(getMainThreadExecutor());
+					jobRescaleCoordinator.init(getMainThreadExecutor());
 					scheduleExecutionGraph();
 
 					return Acknowledge.get();
@@ -1133,6 +1172,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 
 		executionGraph = newExecutionGraph;
 		jobManagerJobMetricGroup = newJobManagerJobMetricGroup;
+		jobRescaleCoordinator.assignExecutionGraph(newExecutionGraph);
 	}
 
 	private void resetAndScheduleExecutionGraph() throws Exception {
@@ -1143,6 +1183,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 		if (executionGraph.getState() == JobStatus.CREATED) {
 			executionGraphAssignedFuture = CompletableFuture.completedFuture(null);
 			executionGraph.start(getMainThreadExecutor());
+			jobRescaleCoordinator.init(getMainThreadExecutor());
 		} else {
 			suspendAndClearExecutionGraphFields(new FlinkException("ExecutionGraph is being reset in order to be rescheduled."));
 			final JobManagerJobMetricGroup newJobManagerJobMetricGroup = jobMetricGroupFactory.create(jobGraph);
@@ -1152,6 +1193,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 				(JobStatus ignored, Throwable throwable) -> {
 					newExecutionGraph.start(getMainThreadExecutor());
 					assignExecutionGraph(newExecutionGraph, newJobManagerJobMetricGroup);
+					jobRescaleCoordinator.init(getMainThreadExecutor());
 					return null;
 				});
 		}
@@ -1164,6 +1206,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 		// register self as job status change listener
 		jobStatusListener = new JobManagerJobStatusListener();
 		executionGraph.registerJobStatusListener(jobStatusListener);
+		executionGraph.registerJobStatusListener(jobRescaleCoordinator.createActivatorDeactivator());
 
 		try {
 			executionGraph.scheduleForExecution();

@@ -60,7 +60,7 @@ public class TaskStateManagerImpl implements TaskStateManager {
 
 	/** The data given by the job manager to restore the job. This is null for a new job without previous state. */
 	@Nullable
-	private final JobManagerTaskRestore jobManagerTaskRestore;
+	private JobManagerTaskRestore jobManagerTaskRestore;
 
 	/** The local state store to which this manager reports local state snapshots. */
 	private final TaskLocalStateStore localStateStore;
@@ -159,5 +159,9 @@ public class TaskStateManagerImpl implements TaskStateManager {
 	@Override
 	public void notifyCheckpointComplete(long checkpointId) throws Exception {
 		localStateStore.confirmCheckpoint(checkpointId);
+	}
+
+	public void updateTaskRestore(JobManagerTaskRestore jobManagerTaskRestore) {
+		this.jobManagerTaskRestore = jobManagerTaskRestore;
 	}
 }

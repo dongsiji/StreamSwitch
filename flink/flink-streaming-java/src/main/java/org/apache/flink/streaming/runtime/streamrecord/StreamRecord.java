@@ -36,6 +36,12 @@ public final class StreamRecord<T> extends StreamElement {
 	/** Flag whether the timestamp is actually set. */
 	private boolean hasTimestamp;
 
+	// add a new timestamp to get end-to-end latency
+	private long latencyTimestamp;
+
+	// add a new timestamp to get end-to-end latency
+	private int keyGroup;
+
 	/**
 	 * Creates a new StreamRecord. The record does not have a timestamp.
 	 */
@@ -53,12 +59,30 @@ public final class StreamRecord<T> extends StreamElement {
 	public StreamRecord(T value, long timestamp) {
 		this.value = value;
 		this.timestamp = timestamp;
+		this.latencyTimestamp = 0l;
+		this.keyGroup=0;
 		this.hasTimestamp = true;
 	}
 
 	// ------------------------------------------------------------------------
 	//  Accessors
 	// ------------------------------------------------------------------------
+
+	public long getLatenyTimestamp() {
+		return latencyTimestamp;
+	}
+
+	public void setLatenyTimestamp(long latencyTimestamp) {
+		this.latencyTimestamp = latencyTimestamp;
+	}
+
+	public void setKeyGroup(int keyGroup) {
+		this.keyGroup = keyGroup;
+	}
+
+	public int getKeyGroup() {
+		return this.keyGroup;
+	}
 
 	/**
 	 * Returns the value wrapped in this stream value.
@@ -83,7 +107,7 @@ public final class StreamRecord<T> extends StreamElement {
 
 	/** Checks whether this record has a timestamp.
 	 *
- 	 * @return True if the record has a timestamp, false if not.
+	 * @return True if the record has a timestamp, false if not.
 	 */
 	public boolean hasTimestamp() {
 		return hasTimestamp;
@@ -119,8 +143,10 @@ public final class StreamRecord<T> extends StreamElement {
 	@SuppressWarnings("unchecked")
 	public <X> StreamRecord<X> replace(X value, long timestamp) {
 		this.timestamp = timestamp;
+		this.latencyTimestamp = System.nanoTime();
 		this.value = (T) value;
 		this.hasTimestamp = true;
+		this.keyGroup = 0;
 
 		return (StreamRecord<X>) this;
 	}
@@ -145,7 +171,9 @@ public final class StreamRecord<T> extends StreamElement {
 	public StreamRecord<T> copy(T valueCopy) {
 		StreamRecord<T> copy = new StreamRecord<>(valueCopy);
 		copy.timestamp = this.timestamp;
+		copy.latencyTimestamp = this.latencyTimestamp;
 		copy.hasTimestamp = this.hasTimestamp;
+		copy.keyGroup = this.keyGroup;
 		return copy;
 	}
 
@@ -156,7 +184,10 @@ public final class StreamRecord<T> extends StreamElement {
 	public void copyTo(T valueCopy, StreamRecord<T> target) {
 		target.value = valueCopy;
 		target.timestamp = this.timestamp;
+		target.latencyTimestamp = this.latencyTimestamp;
 		target.hasTimestamp = this.hasTimestamp;
+		target.keyGroup = this.keyGroup;
+
 	}
 
 	// ------------------------------------------------------------------------
@@ -171,8 +202,8 @@ public final class StreamRecord<T> extends StreamElement {
 		else if (o != null && getClass() == o.getClass()) {
 			StreamRecord<?> that = (StreamRecord<?>) o;
 			return this.hasTimestamp == that.hasTimestamp &&
-					(!this.hasTimestamp || this.timestamp == that.timestamp) &&
-					(this.value == null ? that.value == null : this.value.equals(that.value));
+				(!this.hasTimestamp || this.timestamp == that.timestamp) &&
+				(this.value == null ? that.value == null : this.value.equals(that.value));
 		}
 		else {
 			return false;

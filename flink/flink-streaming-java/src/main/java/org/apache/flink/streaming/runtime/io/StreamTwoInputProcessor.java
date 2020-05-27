@@ -32,10 +32,12 @@ import org.apache.flink.runtime.io.network.api.serialization.SpillingAdaptiveSpa
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
+import org.apache.flink.runtime.io.network.partition.consumer.UnionInputGate;
 import org.apache.flink.runtime.metrics.groups.OperatorMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.runtime.plugable.DeserializationDelegate;
 import org.apache.flink.runtime.plugable.NonReusingDeserializationDelegate;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.operators.TwoInputStreamOperator;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -52,6 +54,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collection;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -76,7 +79,7 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 
 	private static final Logger LOG = LoggerFactory.getLogger(StreamTwoInputProcessor.class);
 
-	private final RecordDeserializer<DeserializationDelegate<StreamElement>>[] recordDeserializers;
+	private RecordDeserializer<DeserializationDelegate<StreamElement>>[] recordDeserializers;
 
 	private RecordDeserializer<DeserializationDelegate<StreamElement>> currentRecordDeserializer;
 
@@ -86,6 +89,13 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 	private final CheckpointBarrierHandler barrierHandler;
 
 	private final Object lock;
+
+	private final Collection<InputGate> inputGates1;
+	private final Collection<InputGate> inputGates2;
+
+	private final InputGate inputGate;
+
+	private final IOManager ioManager;
 
 	// ---------------- Status and Watermark Valves ------------------
 
@@ -103,8 +113,8 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 	private StatusWatermarkValve statusWatermarkValve2;
 
 	/** Number of input channels the valves need to handle. */
-	private final int numInputChannels1;
-	private final int numInputChannels2;
+	private int numInputChannels1;
+	private int numInputChannels2;
 
 	/**
 	 * The channel from which a buffer came, tracked so that we can appropriately map
@@ -122,6 +132,13 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 	private final WatermarkGauge input2WatermarkGauge;
 
 	private Counter numRecordsIn;
+
+	private MetricsManager metricsManager;
+
+	private long deserializationDuration = 0;
+	private long processingDuration = 0;
+	private long recordsProcessed = 0;
+	private long endToEndLatency = 0;
 
 	private boolean isFinished;
 
@@ -142,7 +159,11 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 			WatermarkGauge input1WatermarkGauge,
 			WatermarkGauge input2WatermarkGauge) throws IOException {
 
-		final InputGate inputGate = InputGateUtil.createInputGate(inputGates1, inputGates2);
+		this.inputGates1 = inputGates1;
+		this.inputGates2 = inputGates2;
+
+		this.inputGate = InputGateUtil.createInputGate(inputGates1, inputGates2);
+		this.ioManager = ioManager;
 
 		this.barrierHandler = InputProcessorUtil.createCheckpointBarrierHandler(
 			checkpointedTask, checkpointMode, ioManager, inputGate, taskManagerConfig);
@@ -202,11 +223,13 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 		while (true) {
 			if (currentRecordDeserializer != null) {
 				DeserializationResult result;
+				long start = System.nanoTime();
 				if (currentChannel < numInputChannels1) {
 					result = currentRecordDeserializer.getNextRecord(deserializationDelegate1);
 				} else {
 					result = currentRecordDeserializer.getNextRecord(deserializationDelegate2);
 				}
+				deserializationDuration += System.nanoTime() - start;
 
 				if (result.isBufferConsumed()) {
 					currentRecordDeserializer.getCurrentBuffer().recycleBuffer();
@@ -235,7 +258,18 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 							synchronized (lock) {
 								numRecordsIn.inc();
 								streamOperator.setKeyContextElement1(record);
-								streamOperator.processElement1(record);
+//								streamOperator.processElement1(record);
+								long processingStart = System.nanoTime();
+								streamOperator.processElement1(recordOrWatermark.<IN1>asRecord());
+								long curTime = System.nanoTime();
+
+								metricsManager.incRecordIn(record.getKeyGroup());
+//								System.out.println("key group is: " + record.getKeyGroup());
+
+								processingDuration += curTime - processingStart;
+								recordsProcessed++;
+								endToEndLatency += System.currentTimeMillis() - record.getLatenyTimestamp();
+								recordsProcessed++;
 							}
 							return true;
 
@@ -262,13 +296,47 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 							synchronized (lock) {
 								numRecordsIn.inc();
 								streamOperator.setKeyContextElement2(record);
-								streamOperator.processElement2(record);
+//								streamOperator.processElement2(record);
+								long processingStart = System.nanoTime();
+								streamOperator.processElement2(recordOrWatermark.<IN2>asRecord());
+
+								long curTime = System.nanoTime();
+
+								metricsManager.incRecordIn(record.getKeyGroup());
+//								System.out.println("key group is: " + record.getKeyGroup());
+
+								processingDuration += curTime - processingStart;
+								recordsProcessed++;
+								long curMsTime = System.currentTimeMillis();
+								endToEndLatency += curMsTime - record.getLatenyTimestamp();
+
+								// ground truth dump
+								System.out.println("keygroup: " + record.getKeyGroup() + " arrival_ts: " + record.getLatenyTimestamp() + " completion_ts: " + curMsTime);
+
+								// inform the MetricsManager that the buffer is consumed
+								metricsManager.inputBufferConsumed(System.nanoTime(), deserializationDuration, processingDuration, recordsProcessed, endToEndLatency);
+
+								processingDuration = 0;
+								recordsProcessed = 0;
+								endToEndLatency = 0;
+								deserializationDuration = 0;
 							}
 							return true;
 						}
 					}
 				}
 			}
+
+//			// the buffer got empty
+//			if (deserializationDuration > 0) {
+//				// inform the MetricsManager that the buffer is consumed
+//				metricsManager.inputBufferConsumed(System.nanoTime(), deserializationDuration, processingDuration, recordsProcessed, endToEndLatency);
+//
+//				deserializationDuration = 0;
+//				processingDuration = 0;
+//				recordsProcessed = 0;
+//				endToEndLatency = 0;
+//			}
 
 			final BufferOrEvent bufferOrEvent = barrierHandler.getNextNonBlocked();
 			if (bufferOrEvent != null) {
@@ -278,6 +346,8 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 					currentRecordDeserializer = recordDeserializers[currentChannel];
 					currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
 
+					// inform the MetricsManager that we got a new input buffer
+					metricsManager.newInputBuffer(System.nanoTime());
 				} else {
 					// Event received
 					final AbstractEvent event = bufferOrEvent.getEvent();
@@ -308,6 +378,44 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 
 		// cleanup the barrier handler resources
 		barrierHandler.cleanup();
+	}
+
+	@SuppressWarnings("unchecked")
+	public void reconnect() {
+		int numInputChannels1 = 0;
+		int numInputChannels2 = 0;
+
+		for (InputGate gate: inputGates1) {
+			numInputChannels1 += gate.getNumberOfInputChannels();
+		}
+		for (InputGate gate: inputGates2) {
+			numInputChannels2 += gate.getNumberOfInputChannels();
+		}
+
+		this.numInputChannels1 = numInputChannels1;
+		this.numInputChannels2 = numInputChannels2;
+
+		final int numInputChannels = numInputChannels1 + numInputChannels2;
+
+		((UnionInputGate) inputGate).reset(numInputChannels);
+
+		RecordDeserializer<DeserializationDelegate<StreamElement>>[] oldDeserializer =
+			Arrays.copyOf(recordDeserializers, recordDeserializers.length);
+		recordDeserializers = new SpillingAdaptiveSpanningRecordDeserializer[numInputChannels];
+
+		for (int i = 0; i < recordDeserializers.length; i++) {
+			if (i < oldDeserializer.length) {
+				recordDeserializers[i] = oldDeserializer[i];
+			} else {
+				recordDeserializers[i] = new SpillingAdaptiveSpanningRecordDeserializer<>(
+					ioManager.getSpillingDirectoriesPaths());
+			}
+		}
+
+		statusWatermarkValve1.rescale(numInputChannels);
+		statusWatermarkValve2.rescale(numInputChannels);
+
+		barrierHandler.updateTotalNumberOfInputChannels(numInputChannels);
 	}
 
 	private class ForwardingValveOutputHandler1 implements StatusWatermarkValve.ValveOutputHandler {
@@ -396,5 +504,9 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 				throw new RuntimeException("Exception occurred while processing valve output stream status: ", e);
 			}
 		}
+	}
+
+	public void setMetricsManager(MetricsManager metricsManager) {
+		this.metricsManager = metricsManager;
 	}
 }

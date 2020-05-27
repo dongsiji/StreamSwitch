@@ -31,6 +31,9 @@ import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static org.apache.flink.util.Preconditions.checkArgument;
 
 /**
@@ -49,6 +52,7 @@ import static org.apache.flink.util.Preconditions.checkArgument;
 public class HeapPriorityQueueSet<T extends HeapPriorityQueueElement>
 	extends HeapPriorityQueue<T>
 	implements KeyGroupedInternalPriorityQueue<T> {
+	private static final Logger LOG = LoggerFactory.getLogger(HeapPriorityQueueSet.class);
 
 	/**
 	 * Function to extract the key from contained elements.
@@ -94,7 +98,9 @@ public class HeapPriorityQueueSet<T extends HeapPriorityQueueElement>
 		this.totalNumberOfKeyGroups = totalNumberOfKeyGroups;
 		this.keyGroupRange = keyGroupRange;
 
-		final int keyGroupsInLocalRange = keyGroupRange.getNumberOfKeyGroups();
+		int keyGroupsInLocalRange = keyGroupRange.getNumberOfKeyGroups();
+		keyGroupsInLocalRange = keyGroupsInLocalRange == 0 ? 1 : keyGroupsInLocalRange;
+
 		final int deduplicationSetSize = 1 + minimumCapacity / keyGroupsInLocalRange;
 		this.deduplicationMapsByKeyGroup = new HashMap[keyGroupsInLocalRange];
 		for (int i = 0; i < keyGroupsInLocalRange; ++i) {
@@ -144,19 +150,32 @@ public class HeapPriorityQueueSet<T extends HeapPriorityQueueElement>
 
 	private HashMap<T, T> getDedupMapForKeyGroup(
 		@Nonnegative int keyGroupId) {
-		return deduplicationMapsByKeyGroup[globalKeyGroupToLocalIndex(keyGroupId)];
+//		return deduplicationMapsByKeyGroup[globalKeyGroupToLocalIndex(keyGroupId)];
+		try {
+			return deduplicationMapsByKeyGroup[globalKeyGroupToLocalIndex(keyGroupId)];
+		} catch (Exception e) {
+			LOG.info("====== err " + keyGroupRange
+				+ "   input keyGroupId  " + keyGroupId
+				+ "   " + keyGroupRange.getFromAlignedToHashed()
+			);
+			throw new RuntimeException(e);
+		}
 	}
 
 	private HashMap<T, T> getDedupMapForElement(T element) {
-		int keyGroup = KeyGroupRangeAssignment.assignToKeyGroup(
+		int hashedKeyGroup = KeyGroupRangeAssignment.assignToKeyGroup(
 			keyExtractor.extractKeyFromElement(element),
 			totalNumberOfKeyGroups);
-		return getDedupMapForKeyGroup(keyGroup);
+		return getDedupMapForKeyGroup(hashedKeyGroup);
 	}
 
-	private int globalKeyGroupToLocalIndex(int keyGroup) {
-		checkArgument(keyGroupRange.contains(keyGroup));
-		return keyGroup - keyGroupRange.getStartKeyGroup();
+	private int globalKeyGroupToLocalIndex(int hashedKeyGroup) {
+		int alignedKeyGroup = keyGroupRange.mapFromHashedToAligned(hashedKeyGroup);
+//		checkArgument(keyGroupRange.contains(keyGroup));
+//		LOG.info("++++---- keyGroupRange: " + keyGroupRange +
+//			", alignedKeyGroupIndex: " + alignedKeyGroup +
+//			", hashedKeyGroup: " + hashedKeyGroup);
+		return alignedKeyGroup - keyGroupRange.getStartKeyGroup();
 	}
 
 	@Nonnull

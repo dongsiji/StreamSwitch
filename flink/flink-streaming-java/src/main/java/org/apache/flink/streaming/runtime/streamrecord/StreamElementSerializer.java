@@ -172,6 +172,9 @@ public final class StreamElementSerializer<T> extends TypeSerializer<StreamEleme
 			} else {
 				target.write(TAG_REC_WITHOUT_TIMESTAMP);
 			}
+			target.writeInt(record.getKeyGroup());
+			target.writeLong(record.getLatenyTimestamp());
+//			System.out.println("write keygroup to output: " + record.getKeyGroup());
 			typeSerializer.serialize(record.getValue(), target);
 		}
 		else if (value.isWatermark()) {
@@ -199,10 +202,22 @@ public final class StreamElementSerializer<T> extends TypeSerializer<StreamEleme
 		int tag = source.readByte();
 		if (tag == TAG_REC_WITH_TIMESTAMP) {
 			long timestamp = source.readLong();
-			return new StreamRecord<T>(typeSerializer.deserialize(source), timestamp);
+			int keyGroup = source.readInt();
+			long latencyTimestamp = source.readLong();
+			StreamRecord record = new StreamRecord<T>(typeSerializer.deserialize(source), timestamp);
+			record.setLatenyTimestamp(latencyTimestamp);
+			record.setKeyGroup(keyGroup);
+//			System.out.println("read keygroup from input: " + record.getKeyGroup());
+			return record;
 		}
 		else if (tag == TAG_REC_WITHOUT_TIMESTAMP) {
-			return new StreamRecord<T>(typeSerializer.deserialize(source));
+			int keyGroup = source.readInt();
+			long latencyTimestamp = source.readLong();
+			StreamRecord record = new StreamRecord<T>(typeSerializer.deserialize(source));
+			record.setLatenyTimestamp(latencyTimestamp);
+			record.setKeyGroup(keyGroup);
+//			System.out.println("read keygroup from input: " + record.getKeyGroup());
+			return record;
 		}
 		else if (tag == TAG_WATERMARK) {
 			return new Watermark(source.readLong());
@@ -223,15 +238,23 @@ public final class StreamElementSerializer<T> extends TypeSerializer<StreamEleme
 		int tag = source.readByte();
 		if (tag == TAG_REC_WITH_TIMESTAMP) {
 			long timestamp = source.readLong();
+			int keyGroup = source.readInt();
+			long latencyTimestamp = source.readLong();
 			T value = typeSerializer.deserialize(source);
 			StreamRecord<T> reuseRecord = reuse.asRecord();
 			reuseRecord.replace(value, timestamp);
+			reuseRecord.setLatenyTimestamp(latencyTimestamp);
+			reuseRecord.setKeyGroup(keyGroup);
 			return reuseRecord;
 		}
 		else if (tag == TAG_REC_WITHOUT_TIMESTAMP) {
+			int keyGroup = source.readInt();
+			long latencyTimestamp = source.readLong();
 			T value = typeSerializer.deserialize(source);
 			StreamRecord<T> reuseRecord = reuse.asRecord();
 			reuseRecord.replace(value);
+			reuseRecord.setLatenyTimestamp(latencyTimestamp);
+			reuseRecord.setKeyGroup(keyGroup);
 			return reuseRecord;
 		}
 		else if (tag == TAG_WATERMARK) {

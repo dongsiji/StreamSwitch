@@ -33,6 +33,7 @@ import org.apache.flink.runtime.jobmaster.AllocatedSlotReport;
 import org.apache.flink.runtime.jobmaster.JobMasterId;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.StackTraceSampleResponse;
+import org.apache.flink.runtime.rescale.RescaleOptions;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerId;
 import org.apache.flink.runtime.rpc.RpcGateway;
 import org.apache.flink.runtime.rpc.RpcTimeout;
@@ -84,6 +85,13 @@ public interface TaskExecutorGateway extends RpcGateway {
 	CompletableFuture<Acknowledge> submitTask(
 		TaskDeploymentDescriptor tdd,
 		JobMasterId jobMasterId,
+		@RpcTimeout Time timeout);
+
+	CompletableFuture<Acknowledge> rescaleTask(
+		ExecutionAttemptID executionAttemptID,
+		TaskDeploymentDescriptor tdd,
+		JobMasterId jobMasterId,
+		RescaleOptions rescaleOptions,
 		@RpcTimeout Time timeout);
 
 	/**

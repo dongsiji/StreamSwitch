@@ -29,10 +29,12 @@ import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.io.network.api.CancelCheckpointMarker;
 import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
 import org.apache.flink.runtime.io.network.api.writer.RecordWriter;
+import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.metrics.MetricNames;
 import org.apache.flink.runtime.metrics.groups.OperatorIOMetricGroup;
 import org.apache.flink.runtime.metrics.groups.OperatorMetricGroup;
 import org.apache.flink.runtime.plugable.SerializationDelegate;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 import org.apache.flink.streaming.api.collector.selector.CopyingDirectedOutput;
 import org.apache.flink.streaming.api.collector.selector.DirectedOutput;
 import org.apache.flink.streaming.api.collector.selector.OutputSelector;
@@ -59,6 +61,7 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -122,7 +125,8 @@ public class OperatorChain<OUT, OP extends StreamOperator<OUT>> implements Strea
 					recordWriters.get(i),
 					outEdge,
 					chainedConfigs.get(outEdge.getSourceId()),
-					containingTask.getEnvironment());
+					containingTask.getEnvironment(),
+					containingTask.getMetricsManager());
 
 				this.streamOutputs[i] = streamOutput;
 				streamOutputMap.put(outEdge, streamOutput);
@@ -267,6 +271,53 @@ public class OperatorChain<OUT, OP extends StreamOperator<OUT>> implements Strea
 		return allOperators == null ? 0 : allOperators.length;
 	}
 
+	public <T> RecordWriterOutput[] substituteRecordWriter(
+			StreamTask<OUT, OP> containingTask,
+			List<RecordWriter<SerializationDelegate<StreamRecord<OUT>>>> recordWriters) throws IOException {
+
+		final ClassLoader userCodeClassloader = containingTask.getUserCodeClassLoader();
+		final StreamConfig configuration = containingTask.getConfiguration();
+
+		final RecordWriterOutput[] oldStreamOutputCopies = Arrays.copyOf(this.streamOutputs, this.streamOutputs.length);
+
+		Map<Integer, StreamConfig> chainedConfigs = configuration.getTransitiveChainedTaskConfigsWithSelf(userCodeClassloader);
+		List<StreamEdge> outEdgesInOrder = configuration.getOutEdgesInOrder(userCodeClassloader);
+		Map<StreamEdge, RecordWriterOutput<?>> streamOutputMap = new HashMap<>(outEdgesInOrder.size());
+
+		for (int i = 0; i < outEdgesInOrder.size(); i++) {
+			StreamEdge outEdge = outEdgesInOrder.get(i);
+
+			RecordWriterOutput<?> streamOutput = createStreamOutput(
+				recordWriters.get(i),
+				outEdge,
+				chainedConfigs.get(outEdge.getSourceId()),
+				containingTask.getEnvironment(),
+				containingTask.getMetricsManager());
+
+			this.streamOutputs[i] = streamOutput;
+			streamOutputMap.put(outEdge, streamOutput);
+		}
+
+		Map<OperatorID, StreamOperator<?>> operatorMap = new HashMap<>();
+		for (StreamOperator<?> operator : this.allOperators) {
+			operatorMap.put(operator.getOperatorID(), operator);
+		}
+
+		for (StreamConfig operatorConfig : chainedConfigs.values()) {
+			@SuppressWarnings("unchecked")
+			StreamOperator<T> operator = (StreamOperator<T>) operatorMap.get(operatorConfig.getOperatorID());
+
+			for (StreamEdge edge : operatorConfig.getNonChainedOutputs(userCodeClassloader)) {
+				@SuppressWarnings("unchecked")
+				RecordWriterOutput<T> output = (RecordWriterOutput<T>) streamOutputMap.get(edge);
+				operator.updateOutput(containingTask, output);
+				// TODO scaling : what if multiple output
+			}
+		}
+
+		return oldStreamOutputCopies;
+	}
+
 	// ------------------------------------------------------------------------
 	//  initialization utilities
 	// ------------------------------------------------------------------------
@@ -392,7 +443,8 @@ public class OperatorChain<OUT, OP extends StreamOperator<OUT>> implements Strea
 			RecordWriter<SerializationDelegate<StreamRecord<OUT>>> recordWriter,
 			StreamEdge edge,
 			StreamConfig upStreamConfig,
-			Environment taskEnvironment) {
+			Environment taskEnvironment,
+			MetricsManager metricsManager) {
 		OutputTag sideOutputTag = edge.getOutputTag(); // OutputTag, return null if not sideOutput
 
 		TypeSerializer outSerializer = null;
@@ -406,7 +458,7 @@ public class OperatorChain<OUT, OP extends StreamOperator<OUT>> implements Strea
 			outSerializer = upStreamConfig.getTypeSerializerOut(taskEnvironment.getUserClassLoader());
 		}
 
-		return new RecordWriterOutput<>(recordWriter, outSerializer, sideOutputTag, this);
+		return new RecordWriterOutput<>(recordWriter, outSerializer, sideOutputTag, this, metricsManager);
 	}
 
 	// ------------------------------------------------------------------------

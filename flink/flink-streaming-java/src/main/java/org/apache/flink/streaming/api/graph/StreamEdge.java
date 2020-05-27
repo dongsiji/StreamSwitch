@@ -85,6 +85,10 @@ public class StreamEdge implements Serializable {
 				+ "_" + outputPartitioner;
 	}
 
+	public String getEdgeId() {
+		return edgeId;
+	}
+
 	public int getSourceId() {
 		return sourceId;
 	}

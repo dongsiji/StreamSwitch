@@ -66,7 +66,7 @@ public class CheckpointStatsTracker {
 	private final ReentrantLock statsReadWriteLock = new ReentrantLock();
 
 	/** Total number of subtasks to checkpoint. */
-	private final int totalSubtaskCount;
+	private int totalSubtaskCount;
 
 	/** Snapshotting settings created from the CheckpointConfig. */
 	private final CheckpointCoordinatorConfiguration jobCheckpointingConfiguration;
@@ -137,6 +137,15 @@ public class CheckpointStatsTracker {
 
 		// Register the metrics
 		registerMetrics(metricGroup);
+	}
+
+	void increaseTotalSubtaskCount(int increment) {
+		totalSubtaskCount = totalSubtaskCount + increment;
+	}
+
+	// TODO scaling: need to check if this is valid method, I am afraid it is a buggy method
+	void decreaseTotalSubtaskCount(int decrement) {
+		totalSubtaskCount = totalSubtaskCount - decrement;
 	}
 
 	/**

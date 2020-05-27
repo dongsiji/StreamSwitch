@@ -56,7 +56,7 @@ public class StatusWatermarkValve {
 	 * Array of current status of all input channels. Changes as watermarks & stream statuses are
 	 * fed into the valve.
 	 */
-	private final InputChannelStatus[] channelStatuses;
+	private volatile InputChannelStatus[] channelStatuses;
 
 	/** The last watermark emitted from the valve. */
 	private long lastOutputWatermark;
@@ -84,6 +84,23 @@ public class StatusWatermarkValve {
 
 		this.lastOutputWatermark = Long.MIN_VALUE;
 		this.lastOutputStreamStatus = StreamStatus.ACTIVE;
+	}
+
+	public void rescale(int newNumInputChannels) {
+		InputChannelStatus[] newChannelStatuses = new InputChannelStatus[newNumInputChannels];
+
+		for (int i = 0; i < newNumInputChannels; i++) {
+			if (i < channelStatuses.length) {
+				newChannelStatuses[i] = channelStatuses[i];
+			} else {
+				newChannelStatuses[i] = new InputChannelStatus();
+				newChannelStatuses[i].watermark = Long.MIN_VALUE;
+				newChannelStatuses[i].streamStatus = StreamStatus.ACTIVE;
+				newChannelStatuses[i].isWatermarkAligned = true;
+			}
+		}
+
+		channelStatuses = newChannelStatuses;
 	}
 
 	/**

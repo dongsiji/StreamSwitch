@@ -37,6 +37,8 @@ public class TaskInfo {
 	private final int numberOfParallelSubtasks;
 	private final int attemptNumber;
 
+	private int idInModel = Integer.MAX_VALUE/2;
+
 	public TaskInfo(
 		String taskName,
 		int maxNumberOfParallelSubtasks,
@@ -138,5 +140,13 @@ public class TaskInfo {
 	 */
 	public String getAllocationIDAsString() {
 		return allocationIDAsString;
+	}
+
+	public void setIdInModel(int idInModel) {
+		this.idInModel = idInModel;
+	}
+
+	public int getIdInModel() {
+		return idInModel;
 	}
 }

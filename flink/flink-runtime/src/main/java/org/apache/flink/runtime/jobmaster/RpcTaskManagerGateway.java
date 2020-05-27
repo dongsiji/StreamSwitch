@@ -28,6 +28,7 @@ import org.apache.flink.runtime.executiongraph.PartitionInfo;
 import org.apache.flink.runtime.jobmanager.slots.TaskManagerGateway;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.StackTraceSampleResponse;
+import org.apache.flink.runtime.rescale.RescaleOptions;
 import org.apache.flink.runtime.taskexecutor.TaskExecutorGateway;
 import org.apache.flink.util.Preconditions;
 
@@ -73,6 +74,11 @@ public class RpcTaskManagerGateway implements TaskManagerGateway {
 	@Override
 	public CompletableFuture<Acknowledge> submitTask(TaskDeploymentDescriptor tdd, Time timeout) {
 		return taskExecutorGateway.submitTask(tdd, jobMasterId, timeout);
+	}
+
+	@Override
+	public CompletableFuture<Acknowledge> rescaleTask(ExecutionAttemptID executionAttemptID, TaskDeploymentDescriptor tdd, RescaleOptions rescaleOptions, Time timeout) {
+		return taskExecutorGateway.rescaleTask(executionAttemptID, tdd, jobMasterId, rescaleOptions, timeout);
 	}
 
 	@Override

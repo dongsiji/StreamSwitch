@@ -35,6 +35,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.messages.checkpoint.AcknowledgeCheckpoint;
 import org.apache.flink.runtime.messages.checkpoint.DeclineCheckpoint;
+import org.apache.flink.runtime.rescale.RescalepointAcknowledgeListener;
 import org.apache.flink.runtime.state.CheckpointStorage;
 import org.apache.flink.runtime.state.CheckpointStorageLocation;
 import org.apache.flink.runtime.state.CompletedCheckpointStorageLocation;
@@ -50,12 +51,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
-import java.util.ArrayDeque;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
@@ -64,8 +60,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.apache.flink.util.Preconditions.checkArgument;
-import static org.apache.flink.util.Preconditions.checkNotNull;
+import static org.apache.flink.util.Preconditions.*;
 
 /**
  * The checkpoint coordinator coordinates the distributed snapshots of operators and state.
@@ -102,13 +97,13 @@ public class CheckpointCoordinator {
 	private final Executor executor;
 
 	/** Tasks who need to be sent a message when a checkpoint is started */
-	private final ExecutionVertex[] tasksToTrigger;
+	private ExecutionVertex[] tasksToTrigger;
 
 	/** Tasks who need to acknowledge a checkpoint before it succeeds */
-	private final ExecutionVertex[] tasksToWaitFor;
+	private ExecutionVertex[] tasksToWaitFor;
 
 	/** Tasks who need to be sent a message when a checkpoint is confirmed */
-	private final ExecutionVertex[] tasksToCommitTo;
+	private ExecutionVertex[] tasksToCommitTo;
 
 	/** Map from checkpoint ID to the pending checkpoint */
 	private final Map<Long, PendingCheckpoint> pendingCheckpoints;
@@ -180,6 +175,8 @@ public class CheckpointCoordinator {
 
 	/** Registry that tracks state which is shared across (incremental) checkpoints */
 	private SharedStateRegistry sharedStateRegistry;
+
+	private RescalepointAcknowledgeListener rescalepointAcknowledgeListener;
 
 	// --------------------------------------------------------------------------------------------
 
@@ -304,6 +301,70 @@ public class CheckpointCoordinator {
 		this.statsTracker = statsTracker;
 	}
 
+	public void setRescalepointAcknowledgeListener(RescalepointAcknowledgeListener listener) {
+		if (listener != null) {
+			this.rescalepointAcknowledgeListener = listener;
+		}
+	}
+
+	public void addVertices(ExecutionVertex[] newVertices, boolean isTasksToTrigger) {
+		if (isTasksToTrigger) {
+			tasksToTrigger = combineVertices(newVertices, tasksToTrigger);
+		}
+
+		tasksToWaitFor = combineVertices(newVertices, tasksToWaitFor);
+		tasksToCommitTo = combineVertices(newVertices, tasksToCommitTo);
+
+		if (statsTracker != null) {
+			statsTracker.increaseTotalSubtaskCount(newVertices.length);
+		}
+	}
+
+	public void dropVertices(ExecutionVertex[] removedVertices, boolean isTasksToTrigger) {
+		if (isTasksToTrigger) {
+			tasksToTrigger = divideVertices(removedVertices, tasksToTrigger);
+		}
+
+		tasksToWaitFor = divideVertices(removedVertices, tasksToWaitFor);
+		tasksToCommitTo = divideVertices(removedVertices, tasksToCommitTo);
+
+		if (statsTracker != null) {
+			statsTracker.decreaseTotalSubtaskCount(removedVertices.length);
+		}
+	}
+
+	private static ExecutionVertex[] combineVertices(ExecutionVertex[] newVertices, ExecutionVertex[] oldVertices) {
+		ExecutionVertex[] newTasksToTrigger = new ExecutionVertex[oldVertices.length + newVertices.length];
+		for (int i = 0; i < newTasksToTrigger.length; i++) {
+			if (i < oldVertices.length) {
+				newTasksToTrigger[i] = oldVertices[i];
+			} else {
+				newTasksToTrigger[i] = newVertices[i - oldVertices.length];
+			}
+		}
+		return newTasksToTrigger;
+	}
+
+	private static ExecutionVertex[] divideVertices(ExecutionVertex[] removedVertices, ExecutionVertex[] oldVertices) {
+		List<ExecutionVertex> newTasksToTrigger = new LinkedList();
+
+		for (int i = 0; i < oldVertices.length; i++) {
+			for (int j = 0; j < removedVertices.length; j++) {
+				if (!oldVertices[i].equals(removedVertices[j])) {
+					newTasksToTrigger.add(oldVertices[i]);
+				}
+			}
+		}
+
+		checkState(newTasksToTrigger.size() == (oldVertices.length - removedVertices.length),
+			"Unexepected vertices removement, "
+				+ " new size: " + newTasksToTrigger
+				+ " old size: " + oldVertices.length
+				+ " to be removed: " + removedVertices.length);
+
+		return (ExecutionVertex[]) newTasksToTrigger.toArray();
+	}
+
 	// --------------------------------------------------------------------------------------------
 	//  Clean shutdown
 	// --------------------------------------------------------------------------------------------
@@ -378,6 +439,22 @@ public class CheckpointCoordinator {
 		} else {
 			Throwable cause = new CheckpointTriggerException("Failed to trigger savepoint.", triggerResult.getFailureReason());
 			return FutureUtils.completedExceptionally(cause);
+		}
+	}
+
+	public PendingCheckpoint triggerRescalePoint(long timestamp) throws CheckpointTriggerException {
+		CheckpointProperties props = CheckpointProperties.forRescalePoint();
+
+		CheckpointTriggerResult triggerResult = triggerCheckpoint(
+			timestamp,
+			props,
+			null,
+			false);
+
+		if (triggerResult.isSuccess()) {
+			return triggerResult.getPendingCheckpoint();
+		} else {
+			throw new CheckpointTriggerException("Failed to trigger rescalepoint.", triggerResult.getFailureReason());
 		}
 	}
 
@@ -752,6 +829,9 @@ public class CheckpointCoordinator {
 						LOG.debug("Received acknowledge message for checkpoint {} from task {} of job {}.",
 							checkpointId, message.getTaskExecutionId(), message.getJob());
 
+						if (rescalepointAcknowledgeListener != null) {
+							rescalepointAcknowledgeListener.onReceiveRescalepointAcknowledge(message.getTaskExecutionId(), checkpoint);
+						}
 						if (checkpoint.isFullyAcknowledged()) {
 							completePendingCheckpoint(checkpoint);
 						}

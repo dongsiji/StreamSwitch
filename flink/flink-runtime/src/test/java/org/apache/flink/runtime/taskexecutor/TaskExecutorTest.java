@@ -91,6 +91,7 @@ import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTable;
 import org.apache.flink.runtime.taskexecutor.slot.TimerService;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.LocalTaskManagerLocation;
+import org.apache.flink.runtime.rescale.RescaleID;
 import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskManagerActions;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
@@ -712,10 +713,13 @@ public class TaskExecutorTest extends TestLogger {
 				new TaskDeploymentDescriptor.NonOffloaded<>(serializedJobVertexInformation),
 				new ExecutionAttemptID(),
 				allocationId,
+				RescaleID.DEFAULT,
 				0,
 				0,
 				0,
 				null,
+				null,
+				0,
 				Collections.emptyList(),
 				Collections.emptyList());
 
@@ -1091,10 +1095,13 @@ public class TaskExecutorTest extends TestLogger {
 				new TaskDeploymentDescriptor.NonOffloaded<>(serializedJobVertexInformation),
 				new ExecutionAttemptID(),
 				allocationId1,
+				RescaleID.DEFAULT,
 				0,
 				0,
 				0,
 				null,
+				null,
+				0,
 				Collections.emptyList(),
 				Collections.emptyList());
 

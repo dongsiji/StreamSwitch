@@ -46,7 +46,9 @@ import org.apache.flink.runtime.jobmanager.scheduler.CoLocationGroup;
 import org.apache.flink.runtime.jobmanager.scheduler.LocationPreferenceConstraint;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
+import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
+import org.apache.flink.runtime.rescale.RescaleID;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.util.EvictingBoundedList;
 import org.apache.flink.types.Either;
@@ -100,7 +102,13 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 	private final Time timeout;
 
 	/** The name in the format "myTask (2/7)", cached to avoid frequent string concatenations. */
-	private final String taskNameWithSubtask;
+	private String taskNameWithSubtask;
+
+	private volatile RescaleID rescaleId;
+
+	private volatile KeyGroupRange keyGroupRange;
+
+	private volatile int idInModel;
 
 	private volatile CoLocationConstraint locationConstraint;
 
@@ -141,7 +149,7 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 	 * @param maxPriorExecutionHistoryLength
 	 *            The number of prior Executions (= execution attempts) to keep.
 	 */
-	public ExecutionVertex(
+	public  ExecutionVertex(
 			ExecutionJobVertex jobVertex,
 			int subTaskIndex,
 			IntermediateResult[] producedDataSets,
@@ -188,6 +196,9 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 		getExecutionGraph().registerExecution(currentExecution);
 
 		this.timeout = timeout;
+
+		this.rescaleId = RescaleID.DEFAULT;
+		this.idInModel = subTaskIndex;
 	}
 
 
@@ -211,6 +222,10 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 		return this.jobVertex.getJobVertex().getName();
 	}
 
+	public void deregisterExecution() {
+		getExecutionGraph().deregisterExecution(currentExecution);
+	}
+
 	/**
 	 * Creates a simple name representation in the style 'taskname (x/y)', where
 	 * 'taskname' is the name as returned by {@link #getTaskName()}, 'x' is the parallel
@@ -222,6 +237,11 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 	@Override
 	public String getTaskNameWithSubtaskIndex() {
 		return this.taskNameWithSubtask;
+	}
+
+	public void updateTaskNameWithSubtaskIndex() {
+		this.taskNameWithSubtask = String.format("%s (%d/%d)",
+			jobVertex.getJobVertex().getName(), subTaskIndex + 1, jobVertex.getParallelism());
 	}
 
 	public int getTotalNumberOfParallelSubtasks() {
@@ -265,6 +285,18 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 	@Override
 	public long getStateTimestamp(ExecutionState state) {
 		return currentExecution.getStateTimestamp(state);
+	}
+
+	public void updateRescaleId(RescaleID rescaleId) {
+		this.rescaleId = rescaleId;
+	}
+
+	public void assignKeyGroupRange(KeyGroupRange keyGroupRange) {
+		this.keyGroupRange = keyGroupRange;
+	}
+
+	public void setIdInModel(int idInModel) {
+		this.idInModel = idInModel;
 	}
 
 	@Override
@@ -840,6 +872,7 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 			InputChannelDeploymentDescriptor[] partitions = InputChannelDeploymentDescriptor.fromEdges(
 				edges,
 				targetSlot.getTaskManagerLocation().getResourceID(),
+				rescaleId,
 				lazyScheduling);
 
 			// If the produced partition has multiple consumers registered, we
@@ -890,10 +923,13 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 			serializedTaskInformation,
 			executionId,
 			targetSlot.getAllocationId(),
+			rescaleId,
 			subTaskIndex,
 			attemptNumber,
 			targetSlot.getPhysicalSlotNumber(),
 			taskRestore,
+			keyGroupRange,
+			idInModel,
 			producedPartitions,
 			consumedPartitions);
 	}

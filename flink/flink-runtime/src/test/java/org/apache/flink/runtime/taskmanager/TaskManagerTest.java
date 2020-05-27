@@ -66,6 +66,7 @@ import org.apache.flink.runtime.messages.TaskMessages;
 import org.apache.flink.runtime.messages.TaskMessages.CancelTask;
 import org.apache.flink.runtime.messages.TaskMessages.StopTask;
 import org.apache.flink.runtime.messages.TaskMessages.SubmitTask;
+import org.apache.flink.runtime.rescale.RescaleID;
 import org.apache.flink.runtime.taskexecutor.TaskManagerServicesConfiguration;
 import org.apache.flink.runtime.testingUtils.TestingTaskManagerMessages;
 import org.apache.flink.runtime.testingUtils.TestingUtils;
@@ -2173,10 +2174,13 @@ public class TaskManagerTest extends TestLogger {
 			new TaskDeploymentDescriptor.NonOffloaded<>(serializedJobVertexInformation),
 			executionAttemptId,
 			new AllocationID(),
+			RescaleID.DEFAULT,
 			subtaskIndex,
 			attemptNumber,
 			targetSlotNumber,
 			null,
+			null,
+			subtaskIndex,
 			producedPartitions,
 			inputGates);
 

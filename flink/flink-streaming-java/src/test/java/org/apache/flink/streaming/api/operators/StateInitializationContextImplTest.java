@@ -196,6 +196,7 @@ public class StateInitializationContextImplTest {
 			mockOperator,
 			// notice that this essentially disables the previous test of the keyed stream because it was and is always
 			// consumed by the timer service.
+			null,
 			IntSerializer.INSTANCE,
 			closableRegistry,
 			new UnregisteredMetricsGroup());

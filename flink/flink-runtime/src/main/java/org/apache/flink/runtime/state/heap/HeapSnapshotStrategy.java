@@ -44,6 +44,8 @@ import org.apache.flink.runtime.state.UncompressedStreamCompressionDecorator;
 import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.function.SupplierWithException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
@@ -62,6 +64,8 @@ import java.util.concurrent.RunnableFuture;
  */
 class HeapSnapshotStrategy<K>
 	extends AbstractSnapshotStrategy<KeyedStateHandle> implements SnapshotStrategySynchronicityBehavior<K> {
+
+	private static final Logger LOG = LoggerFactory.getLogger(HeapSnapshotStrategy.class);
 
 	private final SnapshotStrategySynchronicityBehavior<K> snapshotStrategySynchronicityTrait;
 	private final Map<String, StateTable<K, ?, ?>> registeredKVStates;
@@ -173,9 +177,16 @@ class HeapSnapshotStrategy<K>
 					final long[] keyGroupRangeOffsets = new long[keyGroupRange.getNumberOfKeyGroups()];
 
 					for (int keyGroupPos = 0; keyGroupPos < keyGroupRange.getNumberOfKeyGroups(); ++keyGroupPos) {
-						int keyGroupId = keyGroupRange.getKeyGroupId(keyGroupPos);
+						int alignedKeyGroupId = keyGroupRange.getKeyGroupId(keyGroupPos);
 						keyGroupRangeOffsets[keyGroupPos] = localStream.getPos();
-						outView.writeInt(keyGroupId);
+
+						int hashedKeyGroup = keyGroupRange.mapFromAlignedToHashed(alignedKeyGroupId);
+						outView.writeInt(hashedKeyGroup);
+
+						LOG.info("+++++--- keyGroupRange: " + keyGroupRange +
+							", alignedKeyGroupIndex: " + alignedKeyGroupId +
+							", offset: " + keyGroupRangeOffsets[keyGroupPos] +
+							", hashedKeyGroup: " + hashedKeyGroup);
 
 						for (Map.Entry<StateUID, StateSnapshot> stateSnapshot :
 							cowStateStableSnapshots.entrySet()) {
@@ -188,7 +199,7 @@ class HeapSnapshotStrategy<K>
 								DataOutputViewStreamWrapper kgCompressionView =
 									new DataOutputViewStreamWrapper(kgCompressionOut);
 								kgCompressionView.writeShort(stateNamesToId.get(stateSnapshot.getKey()));
-								partitionedSnapshot.writeStateInKeyGroup(kgCompressionView, keyGroupId);
+								partitionedSnapshot.writeStateInKeyGroup(kgCompressionView, alignedKeyGroupId);
 							} // this will just close the outer compression stream
 						}
 					}

@@ -35,6 +35,7 @@ import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
+import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.checkpoint.decline.CheckpointDeclineTaskNotReadyException;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
@@ -65,8 +66,13 @@ import org.apache.flink.runtime.jobmanager.PartitionProducerDisposedException;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
+import org.apache.flink.runtime.rescale.RescaleID;
+import org.apache.flink.runtime.rescale.RescaleOptions;
+import org.apache.flink.runtime.rescale.TaskRescaleManager;
 import org.apache.flink.runtime.state.CheckpointListener;
+import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.state.TaskStateManagerImpl;
 import org.apache.flink.runtime.taskexecutor.GlobalAggregateManager;
 import org.apache.flink.runtime.util.FatalExitExceptionHandler;
 import org.apache.flink.util.ExceptionUtils;
@@ -231,6 +237,12 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 	/** Partition producer state checker to request partition states from. */
 	private final PartitionProducerStateChecker partitionProducerStateChecker;
 
+	private final TaskRescaleManager taskRescaleManager;
+
+	/** The begin KeyGroupRange used to initialize streamtask */
+	@Nullable
+	private final KeyGroupRange keyGroupRange;
+
 	/** Executor to run future callbacks. */
 	private final Executor executor;
 
@@ -257,6 +269,8 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 	/** Serial executor for asynchronous calls (checkpoints, etc), lazily initialized. */
 	private volatile ExecutorService asyncCallDispatcher;
 
+	private volatile RescaleID rescaleId;
+
 	/** Initialized from the Flink configuration. May also be set at the ExecutionConfig */
 	private long taskCancellationInterval;
 
@@ -278,6 +292,8 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 		TaskInformation taskInformation,
 		ExecutionAttemptID executionAttemptID,
 		AllocationID slotAllocationId,
+		RescaleID rescaleId,
+		@Nullable KeyGroupRange keyGroupRange,
 		int subtaskIndex,
 		int attemptNumber,
 		Collection<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
@@ -316,10 +332,14 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 				attemptNumber,
 				String.valueOf(slotAllocationId));
 
+		this.taskInfo.setIdInModel(taskInformation.getIdInModel());
+
 		this.jobId = jobInformation.getJobId();
 		this.vertexId = taskInformation.getJobVertexId();
 		this.executionId  = Preconditions.checkNotNull(executionAttemptID);
 		this.allocationId = Preconditions.checkNotNull(slotAllocationId);
+		this.rescaleId = Preconditions.checkNotNull(rescaleId);
+		this.keyGroupRange = keyGroupRange;
 		this.taskNameWithSubtask = taskInfo.getTaskNameWithSubtasks();
 		this.jobConfiguration = jobInformation.getJobConfiguration();
 		this.taskConfiguration = taskInformation.getTaskConfiguration();
@@ -364,7 +384,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 		int counter = 0;
 
 		for (ResultPartitionDeploymentDescriptor desc: resultPartitionDeploymentDescriptors) {
-			ResultPartitionID partitionId = new ResultPartitionID(desc.getPartitionId(), executionId);
+			ResultPartitionID partitionId = new ResultPartitionID(desc.getPartitionId(), executionId, rescaleId);
 
 			this.producedPartitions[counter] = new ResultPartition(
 				taskNameWithSubtaskAndId,
@@ -405,6 +425,16 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 		}
 
 		invokableHasBeenCanceled = new AtomicBoolean(false);
+
+		taskRescaleManager = new TaskRescaleManager(
+			jobId,
+			executionId,
+			taskNameWithSubtaskAndId,
+			this,
+			network,
+			ioManager,
+			metrics,
+			resultPartitionConsumableNotifier);
 
 		// finally, create the executing thread, but do not start it
 		executingThread = new Thread(TASK_THREADS_GROUP, this, taskNameWithSubtask);
@@ -682,6 +712,8 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 				network.getTaskEventDispatcher(),
 				checkpointResponder,
 				taskManagerConfig,
+				taskRescaleManager,
+				keyGroupRange,
 				metrics,
 				this);
 
@@ -723,6 +755,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 			// finish the produced partitions. if this fails, we consider the execution failed.
 			for (ResultPartition partition : producedPartitions) {
 				if (partition != null) {
+					LOG.info("++++++ " + taskNameWithSubtask + "   finish partition " + partition.toString());
 					partition.finish();
 				}
 			}
@@ -734,6 +767,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 			}
 		}
 		catch (Throwable t) {
+			LOG.error("++++++ task err " + taskNameWithSubtask, t);
 
 			// unwrap wrapped exceptions to make stack traces more compact
 			if (t instanceof WrappingRuntimeException) {
@@ -1228,6 +1262,41 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 		else {
 			LOG.debug("Ignoring checkpoint commit notification for non-running task {}.", taskNameWithSubtask);
 		}
+	}
+
+	// ------------------------------------------------------------------------
+	//  Actions on rescale
+	// ------------------------------------------------------------------------
+
+	public void updateTaskConfiguration(TaskInformation newTaskInfo) {
+		this.taskConfiguration.addAll(newTaskInfo.getTaskConfiguration());
+	}
+
+	public void prepareRescalingComponent(
+			RescaleID rescaleId,
+			RescaleOptions rescaleOptions,
+			Collection<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
+			Collection<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors) {
+
+		taskRescaleManager.prepareRescaleMeta(
+			rescaleId,
+			rescaleOptions,
+			resultPartitionDeploymentDescriptors,
+			inputGateDeploymentDescriptors);
+	}
+
+	public void assignNewState(KeyGroupRange keyGroupRange, int idInModel, JobManagerTaskRestore taskRestore) {
+		((TaskStateManagerImpl) taskStateManager).updateTaskRestore(taskRestore);
+
+		invokable.reinitializeState(keyGroupRange, idInModel);
+	}
+
+	public void updateKeyGroupRange(KeyGroupRange keyGroupRange) {
+		invokable.updateKeyGroupRange(keyGroupRange);
+	}
+
+	public void createNewResultPartitions() throws IOException {
+		taskRescaleManager.createNewResultPartitions();
 	}
 
 	// ------------------------------------------------------------------------

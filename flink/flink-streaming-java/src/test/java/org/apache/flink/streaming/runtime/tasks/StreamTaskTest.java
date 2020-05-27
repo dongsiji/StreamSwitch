@@ -88,6 +88,7 @@ import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.runtime.taskexecutor.TestGlobalAggregateManager;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.NoOpTaskManagerActions;
+import org.apache.flink.runtime.rescale.RescaleID;
 import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerActions;
@@ -927,6 +928,8 @@ public class StreamTaskTest extends TestLogger {
 			taskInformation,
 			new ExecutionAttemptID(),
 			new AllocationID(),
+			RescaleID.DEFAULT,
+			null,
 			0,
 			0,
 			Collections.<ResultPartitionDeploymentDescriptor>emptyList(),
@@ -1076,12 +1079,13 @@ public class StreamTaskTest extends TestLogger {
 		@Override
 		public StreamTaskStateInitializer createStreamTaskStateInitializer() {
 			final StreamTaskStateInitializer streamTaskStateManager = super.createStreamTaskStateInitializer();
-			return (operatorID, operatorClassName, keyContext, keySerializer, closeableRegistry, metricGroup) -> {
+			return (operatorID, operatorClassName, keyContext, keyGroupRange, keySerializer, closeableRegistry, metricGroup) -> {
 
 				final StreamOperatorStateContext context = streamTaskStateManager.streamOperatorStateContext(
 					operatorID,
 					operatorClassName,
 					keyContext,
+					keyGroupRange,
 					keySerializer,
 					closeableRegistry,
 					metricGroup);

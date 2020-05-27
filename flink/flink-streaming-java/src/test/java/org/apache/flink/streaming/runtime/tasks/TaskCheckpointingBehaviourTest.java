@@ -73,6 +73,7 @@ import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.runtime.state.testutils.BackendForTestStream;
 import org.apache.flink.runtime.taskexecutor.TestGlobalAggregateManager;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
+import org.apache.flink.runtime.rescale.RescaleID;
 import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskManagerActions;
 import org.apache.flink.runtime.util.EnvironmentInformation;
@@ -238,6 +239,8 @@ public class TaskCheckpointingBehaviourTest extends TestLogger {
 				taskInformation,
 				new ExecutionAttemptID(),
 				new AllocationID(),
+				RescaleID.DEFAULT,
+				null,
 				0,
 				0,
 				Collections.<ResultPartitionDeploymentDescriptor>emptyList(),

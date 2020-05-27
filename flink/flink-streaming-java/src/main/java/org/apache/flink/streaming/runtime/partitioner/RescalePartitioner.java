@@ -20,6 +20,7 @@ package org.apache.flink.streaming.runtime.partitioner;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.plugable.SerializationDelegate;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 
 /**
@@ -56,6 +57,11 @@ public class RescalePartitioner<T> extends StreamPartitioner<T> {
 			nextChannelToSendTo = 0;
 		}
 		return nextChannelToSendTo;
+	}
+
+	@Override
+	public void setMetricsManager(MetricsManager metricsManager) {
+
 	}
 
 	public StreamPartitioner<T> copy() {

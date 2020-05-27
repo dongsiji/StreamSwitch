@@ -79,7 +79,7 @@ public class UnionInputGate implements InputGate, InputGateListener {
 	private final Set<InputGate> enqueuedInputGatesWithData = new HashSet<>();
 
 	/** The total number of input channels across all unioned input gates. */
-	private final int totalNumberOfInputChannels;
+	private int totalNumberOfInputChannels;
 
 	/** Registered listener to forward input gate notifications to. */
 	private volatile InputGateListener inputGateListener;
@@ -293,5 +293,15 @@ public class UnionInputGate implements InputGate, InputGateListener {
 				listener.notifyInputGateNonEmpty(this);
 			}
 		}
+	}
+
+	public void reset(int numberOfInputChannels) {
+		this.totalNumberOfInputChannels = numberOfInputChannels;
+
+		this.inputGatesWithData.clear();
+		this.enqueuedInputGatesWithData.clear();
+		this.inputGatesWithRemainingData.clear();
+
+		this.requestedPartitionsFlag = false;
 	}
 }

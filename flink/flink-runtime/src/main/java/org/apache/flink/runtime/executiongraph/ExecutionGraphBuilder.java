@@ -152,6 +152,7 @@ public class ExecutionGraphBuilder {
 			jobName,
 			jobGraph.getSerializedExecutionConfig(),
 			jobGraph.getJobConfiguration(),
+//			jobManagerConfig,
 			jobGraph.getUserJarBlobKeys(),
 			jobGraph.getClasspaths());
 
