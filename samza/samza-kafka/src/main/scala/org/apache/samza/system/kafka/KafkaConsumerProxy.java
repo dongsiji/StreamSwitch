@@ -223,7 +223,7 @@ class KafkaConsumerProxy<K, V> {
 
       Map<SystemStreamPartition, List<IncomingMessageEnvelope>> response;
 
-      response = pollConsumer(sspsToFetch, 500L);
+      response = pollConsumer(sspsToFetch, 10L);
 
       // move the responses into the queue
       for (Map.Entry<SystemStreamPartition, List<IncomingMessageEnvelope>> e : response.entrySet()) {
@@ -312,7 +312,7 @@ class KafkaConsumerProxy<K, V> {
       K key = record.key();
       Object value = record.value();
       IncomingMessageEnvelope imEnvelope =
-          new IncomingMessageEnvelope(ssp, String.valueOf(record.offset()), key, value, getRecordSize(record));
+          new IncomingMessageEnvelope(ssp, String.valueOf(record.offset()), key, value, getRecordSize(record), record.timestamp());
       messages.add(imEnvelope);
     }
     if (LOG.isDebugEnabled()) {

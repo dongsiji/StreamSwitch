@@ -791,8 +791,10 @@ class SamzaContainer(
   def hasStopped(): Boolean = status == SamzaContainerStatus.STOPPED || status == SamzaContainerStatus.FAILED
 
   def run {
+
     try {
       info("Starting container.")
+      metrics.isRunning.set(false);
 
       if (containerListener != null) {
         containerListener.beforeStart()
@@ -805,27 +807,37 @@ class SamzaContainer(
       }
       applicationContainerContextOption.foreach(_.start)
 
-      startMetrics
       startDiagnostics
       startAdmins
       startOffsetManager
       storeContainerLocality
+      info("------------Starting restore.")
       startStores
+      info("-------------end restore.")
       startTableManager
       startDiskSpaceMonitor
       startHostStatisticsMonitor
+      info("------------Starting producer.")
       startProducers
+      info("------------end producer.")
+      info("------------Starting task.")
       startTask
+      info("------------end task.")
+      info("------------Starting consumer.")
       startConsumers
+      info("------------end consumer.")
       startSecurityManger
+      startMetrics
 
       addShutdownHook
       info("Entering run loop.")
+      println("Entering run loop. " + System.currentTimeMillis())
       status = SamzaContainerStatus.STARTED
       if (containerListener != null) {
         containerListener.afterStart()
       }
       metrics.containerStartupTime.update(System.nanoTime() - startTime)
+      metrics.isRunning.set(true)
       runLoop.run
     } catch {
       case e: Throwable =>
@@ -862,8 +874,9 @@ class SamzaContainer(
       if (!status.equals(SamzaContainerStatus.FAILED)) {
         status = SamzaContainerStatus.STOPPED
       }
-
+      metrics.isRunning.set(false)
       info("Shutdown complete.")
+      println("Shutdown complete. " + System.currentTimeMillis()) 
     } catch {
       case e: Throwable =>
         error("Caught exception/error while shutting down container.", e)

@@ -78,17 +78,17 @@ public class AsyncRunLoop implements Runnable, Throttleable {
   private volatile boolean runLoopResumedSinceLastChecked;
 
   public AsyncRunLoop(Map<TaskName, TaskInstance> taskInstances,
-      ExecutorService threadPool,
-      SystemConsumers consumerMultiplexer,
-      int maxConcurrency,
-      long windowMs,
-      long commitMs,
-      long callbackTimeoutMs,
-      long maxThrottlingDelayMs,
-      long maxIdleMs,
-      SamzaContainerMetrics containerMetrics,
-      HighResolutionClock clock,
-      boolean isAsyncCommitEnabled) {
+                      ExecutorService threadPool,
+                      SystemConsumers consumerMultiplexer,
+                      int maxConcurrency,
+                      long windowMs,
+                      long commitMs,
+                      long callbackTimeoutMs,
+                      long maxThrottlingDelayMs,
+                      long maxIdleMs,
+                      SamzaContainerMetrics containerMetrics,
+                      HighResolutionClock clock,
+                      boolean isAsyncCommitEnabled) {
 
     this.threadPool = threadPool;
     this.consumerMultiplexer = consumerMultiplexer;
@@ -118,7 +118,7 @@ public class AsyncRunLoop implements Runnable, Throttleable {
    * Returns mapping of the SystemStreamPartition to the AsyncTaskWorkers to efficiently route the envelopes
    */
   private static Map<SystemStreamPartition, List<AsyncTaskWorker>> getSspToAsyncTaskWorkerMap(
-      Map<TaskName, TaskInstance> taskInstances, Map<TaskName, AsyncTaskWorker> taskWorkers) {
+          Map<TaskName, TaskInstance> taskInstances, Map<TaskName, AsyncTaskWorker> taskWorkers) {
     Map<SystemStreamPartition, List<AsyncTaskWorker>> sspToWorkerMap = new HashMap<>();
     for (TaskInstance task : taskInstances.values()) {
       Set<SystemStreamPartition> ssps = JavaConverters.setAsJavaSetConverter(task.systemStreamPartitions()).asJava();
@@ -143,6 +143,12 @@ public class AsyncRunLoop implements Runnable, Throttleable {
       }
 
       long prevNs = clock.nanoTime();
+
+      long start = clock.nanoTime();
+      long processTime = 0;
+      long timeInterval = 0;
+      int tuples = 0;
+      long latency = 0;
 
       while (!shutdownNow) {
         if (throwable != null) {
@@ -169,9 +175,41 @@ public class AsyncRunLoop implements Runnable, Throttleable {
         long totalNs = currentNs - prevNs;
         prevNs = currentNs;
 
+        if (envelope != null) {
+          tuples++;
+          // ground truth computation
+          latency += System.currentTimeMillis() - envelope.getTimestamp();
+          System.out.println("stock_id: " + envelope.getKey() + " arrival_ts: " + envelope.getTimestamp() + " completion_ts: " + System.currentTimeMillis());
+        }
+
         if (totalNs != 0) {
           // totalNs is not 0 if timer metrics are enabled
           containerMetrics.utilization().set(((double) activeNs) / totalNs);
+        }
+
+        /*****code for instrumentation*******/
+        processTime += activeNs;
+        timeInterval += totalNs;
+
+        if (currentNs - start >= 100000000) {
+
+          // totalNs is not 0 if timer metrics are enabled
+          double utilization = ((double) processTime) / timeInterval;
+          double serviceRate = (double) (tuples * 10) /(utilization);
+          float avgLatency = tuples==0 ? 0 : latency / (float)tuples;
+//          log.debug("utilization: " + utilization + " tuples: " + tuples + " service rate: " + serviceRate + " average latency: " + avgLatency);
+//          System.out.println("utilization: " + utilization + " tuples: " + tuples + " service rate: " + serviceRate + " average latency: " + avgLatency + " curNS: " + currentNs);
+
+
+          containerMetrics.avgUtilization().set(utilization);
+          containerMetrics.serviceRate().set(serviceRate);
+          containerMetrics.latency().set(avgLatency);
+
+          start = currentNs;
+          processTime = 0;
+          timeInterval = 0;
+          tuples = 0;
+          latency = 0;
         }
       }
     } finally {
@@ -207,7 +245,7 @@ public class AsyncRunLoop implements Runnable, Throttleable {
     IncomingMessageEnvelope envelope = consumerMultiplexer.choose(false);
     if (envelope != null) {
       log.trace("Choose envelope ssp {} offset {} for processing",
-          envelope.getSystemStreamPartition(), envelope.getOffset());
+              envelope.getSystemStreamPartition(), envelope.getOffset());
       containerMetrics.envelopes().inc();
     } else {
       log.trace("No envelope is available");
@@ -376,8 +414,8 @@ public class AsyncRunLoop implements Runnable, Throttleable {
       final EpochTimeScheduler epochTimeScheduler = task.epochTimeScheduler();
       if (epochTimeScheduler != null) {
         epochTimeScheduler.registerListener(() -> {
-            state.needScheduler();
-          });
+          state.needScheduler();
+        });
       }
     }
 
@@ -392,8 +430,8 @@ public class AsyncRunLoop implements Runnable, Throttleable {
 
       // filter only those SSPs that are not at end of stream.
       Set<SystemStreamPartition> workingSSPSet = allPartitions.stream()
-          .filter(ssp -> !consumerMultiplexer.isEndOfStream(ssp))
-          .collect(Collectors.toSet());
+              .filter(ssp -> !consumerMultiplexer.isEndOfStream(ssp))
+              .collect(Collectors.toSet());
       return workingSSPSet;
     }
 
@@ -486,11 +524,11 @@ public class AsyncRunLoop implements Runnable, Throttleable {
              * Warn the users if this is the case.
              */
             long averageWindowMs = TimeUnit.NANOSECONDS.toMillis(
-                (long) containerMetrics.windowNs().getSnapshot().getAverage());
+                    (long) containerMetrics.windowNs().getSnapshot().getAverage());
             if (averageWindowMs >= windowMs) {
               log.warn("Average window call duration {} is greater than the configured task.window.ms {}. " +
-                      "This can starve process calls, so consider setting task.window.ms >> {} ms.",
-                  new Object[]{averageWindowMs, windowMs, averageWindowMs});
+                              "This can starve process calls, so consider setting task.window.ms >> {} ms.",
+                      new Object[]{averageWindowMs, windowMs, averageWindowMs});
             }
 
             coordinatorRequests.update(coordinator);
@@ -600,7 +638,7 @@ public class AsyncRunLoop implements Runnable, Throttleable {
             TaskCallbackImpl callbackImpl = (TaskCallbackImpl) callback;
             containerMetrics.processNs().update(clock.nanoTime() - callbackImpl.timeCreatedNs);
             log.trace("Got callback complete for task {}, ssp {}",
-                callbackImpl.taskName, callbackImpl.envelope.getSystemStreamPartition());
+                    callbackImpl.taskName, callbackImpl.envelope.getSystemStreamPartition());
 
             List<TaskCallbackImpl> callbacksToUpdate = callbackManager.updateCallback(callbackImpl);
             for (TaskCallbackImpl callbackToUpdate : callbacksToUpdate) {
@@ -826,7 +864,7 @@ public class AsyncRunLoop implements Runnable, Throttleable {
       int queueSize = pendingEnvelopeQueue.size();
       taskMetrics.pendingMessages().set(queueSize);
       log.trace("fetch envelope ssp {} offset {} to process.",
-          pendingEnvelope.envelope.getSystemStreamPartition(), pendingEnvelope.envelope.getOffset());
+              pendingEnvelope.envelope.getSystemStreamPartition(), pendingEnvelope.envelope.getOffset());
       log.debug("Task {} pending envelopes count is {} after fetching.", taskName, queueSize);
 
       if (pendingEnvelope.markProcessed()) {

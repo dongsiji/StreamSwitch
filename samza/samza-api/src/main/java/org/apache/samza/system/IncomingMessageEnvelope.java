@@ -37,6 +37,7 @@ public class IncomingMessageEnvelope {
   private final Object message;
   private final int size;
   private long timestamp = 0L;
+//  private long deserializationNs = 0L;
 
   /**
    * Constructs a new IncomingMessageEnvelope from specified components.
@@ -46,8 +47,8 @@ public class IncomingMessageEnvelope {
    * @param key A deserialized key received from the partition offset.
    * @param message A deserialized message received from the partition offset.
    */
-  public IncomingMessageEnvelope(SystemStreamPartition systemStreamPartition, String offset, Object key, Object message) {
-    this(systemStreamPartition, offset, key, message, 0);
+  public IncomingMessageEnvelope(SystemStreamPartition systemStreamPartition, String offset, Object key, Object message, long timestamp) {
+    this(systemStreamPartition, offset, key, message, 0, timestamp);
   }
 
   /**
@@ -60,12 +61,13 @@ public class IncomingMessageEnvelope {
    * @param size size of the message and key in bytes.
    */
   public IncomingMessageEnvelope(SystemStreamPartition systemStreamPartition, String offset,
-      Object key, Object message, int size) {
+      Object key, Object message, int size, long timestamp) {
     this.systemStreamPartition = systemStreamPartition;
     this.offset = offset;
     this.key = key;
     this.message = message;
     this.size = size;
+    this.timestamp = timestamp;
   }
 
   public void setTimestamp(long timestamp) {
@@ -100,6 +102,14 @@ public class IncomingMessageEnvelope {
     return END_OF_STREAM_OFFSET.equals(offset);
   }
 
+//  public void setDeserializationNs(long deserializationNs) {
+//    this.deserializationNs = deserializationNs;
+//  }
+//
+//  public long getDeserializationNs() {
+//    return deserializationNs;
+//  }
+
   /**
    * This method is deprecated in favor of WatermarkManager.buildEndOfStreamEnvelope(SystemStreamPartition ssp).
    *
@@ -107,11 +117,11 @@ public class IncomingMessageEnvelope {
    * @return an IncomingMessageEnvelope corresponding to end-of-stream for that SSP.
    */
   public static IncomingMessageEnvelope buildEndOfStreamEnvelope(SystemStreamPartition ssp) {
-    return new IncomingMessageEnvelope(ssp, END_OF_STREAM_OFFSET, null, new EndOfStreamMessage(null));
+    return new IncomingMessageEnvelope(ssp, END_OF_STREAM_OFFSET, null, new EndOfStreamMessage(null), 0);
   }
 
   public static IncomingMessageEnvelope buildWatermarkEnvelope(SystemStreamPartition ssp, long watermark) {
-    return new IncomingMessageEnvelope(ssp, null, null, new WatermarkMessage(watermark, null));
+    return new IncomingMessageEnvelope(ssp, null, null, new WatermarkMessage(watermark, null), 0);
   }
 
   @Override
