@@ -41,13 +41,14 @@ WORKDIR $FLINK_HOME
 
 # Install Flink
 RUN set -ex; \
+  \
   git clone https://github.com/dongsiji/StreamSwitch.git; \
   cd StreamSwitch; \
   git checkout feature/flink-docker; \
-  cp flink-docker/flink-1.8.1-bin-scala_2.11.tgz ../; \
+  cp flink-docker/flink.tgz ../; \
   cd ..; \
   rm -rf StreamSwitch; \
-  mv flink-1.8.1-bin-scala_2.11.tgz flink.tgz; \
+  \
   tar -xf flink.tgz --strip-components=1; \
   rm flink.tgz; \
   chown -R flink:flink .;
