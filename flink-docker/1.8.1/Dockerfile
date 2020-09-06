@@ -3,9 +3,6 @@ FROM openjdk:8-jre
 # Install dependencies
 RUN set -ex; \
   apt-get update; \
-  apt-get -y install git; \
-  apt-get install git-lfs; \
-  git lfs install; \
   apt-get -y install libsnappy1v5; \
   rm -rf /var/lib/apt/lists/*
 
@@ -41,14 +38,6 @@ WORKDIR $FLINK_HOME
 
 # Install Flink
 RUN set -ex; \
-  \
-  git clone https://github.com/dongsiji/StreamSwitch.git; \
-  cd StreamSwitch; \
-  git checkout feature/flink-docker; \
-  cp flink-docker/flink.tgz ../; \
-  cd ..; \
-  rm -rf StreamSwitch; \
-  \
   tar -xf flink.tgz --strip-components=1; \
   rm flink.tgz; \
   chown -R flink:flink .;
